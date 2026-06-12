@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% block main_width %}max-w-screen-2xl{% endblock %}
+{% block title %}Datos históricos – Criminalidad Alajuela{% endblock %}
+
+{% block content %}
+
+<!-- ─── Header ────────────────────────────────────────────────── -->
+<div class="flex items-start justify-between mb-6 gap-4">
+    <div>
+        <h1 class="text-2xl font-bold text-primary">Explorador de datos históricos</h1>
+        <p class="text-slate-500 text-sm mt-1">Acceso al dataset completo del OIJ para el pronóstico de actos delictivos.</p>
+    </div>
+    <a href="{% url 'forecasting:export_csv' %}?q={{ filter_q }}&canton={{ filter_canton }}&delito={{ filter_delito }}&sexo={{ filter_sexo }}&date_from={{ filter_date_from }}&date_to={{ filter_date_to }}"
+       class="flex-shrink-0 inline-flex items-center gap-2 border border-slate-300 bg-white text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:border-primary hover:text-primary hover:bg-primary/5 transition-all shadow-sm">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+        </svg>
+        Exportar datos
+    </a>
+</div>
+
+<!-- ─── Filters ───────────────────────────────────────────────── -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-6">
+    <form method="get" action="{% url 'forecasting:historical' %}" id="filterForm">
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+
+            <!-- Search -->
+            <div class="sm:col-span-2 lg:col-span-1">
+                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Búsqueda</label>
+                <div class="relative">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
+                    </svg>
+                    <input type="text" name="q" value="{{ filter_q }}"
+                        placeholder="Ingrese una palabra…"
+                        class="w-full pl-9 pr-3 border border-slate-300 rounded-lg py-2 text-sm text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10" />
+                </div>
+            </div>
+
+            <!-- Canton -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Cantón</label>
+                <select name="canton"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10">
+                    <option value="">Todos</option>
+                    {% for c in cantons %}
+                    <option value="{{ c }}" {% if filter_canton == c %}selected{% endif %}>{{ c|title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Delito -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Delito</label>
+                <select name="delito"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10">
+                    <option value="">Todos</option>
+                    {% for d in delitos %}
+                    <option value="{{ d }}" {% if filter_delito == d %}selected{% endif %}>{{ d|title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Sexo -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Sexo</label>
+                <select name="sexo"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10">
+                    <option value="">Ambos</option>
+                    <option value="HOMBRE" {% if filter_sexo == 'HOMBRE' %}selected{% endif %}>Hombre</option>
+                    <option value="MUJER" {% if filter_sexo == 'MUJER' %}selected{% endif %}>Mujer</option>
+                </select>
+            </div>
+
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+
+            <!-- Date from -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Fecha inicio</label>
+                <input type="date" name="date_from" value="{{ filter_date_from }}"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10" />
+            </div>
+
+            <!-- Date to -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Fecha fin</label>
+                <input type="date" name="date_to" value="{{ filter_date_to }}"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10" />
+            </div>
+
+            <!-- Actions -->
+            <div class="sm:col-span-2 lg:col-span-2 flex gap-3 justify-end">
+                <a href="{% url 'forecasting:historical' %}"
+                   class="inline-flex items-center gap-2 border border-slate-300 bg-white text-slate-600 px-4 py-2 rounded-lg text-sm font-medium hover:border-slate-400 transition-colors">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/>
+                    </svg>
+                    Limpiar filtros
+                </a>
+                <button type="submit"
+                    class="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-primary-700 transition-colors shadow-sm">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
+                    </svg>
+                    Filtrar
+                </button>
+            </div>
+
+        </div>
+    </form>
+</div>
+
+<!-- ─── Results count ─────────────────────────────────────────── -->
+<div class="flex items-center justify-between mb-3">
+    <p class="text-xs text-slate-500">
+        Mostrando <span class="font-semibold text-slate-700">{{ page_obj.start_index }}–{{ page_obj.end_index }}</span>
+        de <span class="font-semibold text-slate-700">{{ total_filtered|floatformat:"0" }}</span> registros
+    </p>
+    <p class="text-xs text-slate-400">
+        Página {{ page_obj.number }} de {{ total_pages }}
+    </p>
+</div>
+
+<!-- ─── Data table ────────────────────────────────────────────── -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-4">
+    <div class="overflow-x-auto">
+        <table class="w-full pro-table">
+            <thead>
+                <tr>
+                    <th>Delito</th>
+                    <th>SubDelito</th>
+                    <th>Fecha</th>
+                    <th>Hora</th>
+                    <th>Víctima</th>
+                    <th>SubVíctima</th>
+                    <th>Edad</th>
+                    <th>Sexo</th>
+                    <th>Nacionalidad</th>
+                    <th>Provincia</th>
+                    <th>Cantón</th>
+                    <th>Distrito</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rec in page_obj %}
+                <tr>
+                    <td class="font-semibold text-primary text-xs">{{ rec.delito|title }}</td>
+                    <td class="text-xs text-slate-600" title="{{ rec.sub_delito|title|default:'' }}">{{ rec.sub_delito|title|truncatechars:22|default:"—" }}</td>
+                    <td class="font-mono text-xs">{{ rec.fecha|date:"d/m/Y" }}</td>
+                    <td class="text-xs text-slate-500 max-w-24 truncate" title="{{ rec.hora }}">{{ rec.hora|default:"—" }}</td>
+                    <td class="text-xs">{{ rec.victima|title|default:"—" }}</td>
+                    <td class="text-xs text-slate-500 max-w-28 truncate" title="{{ rec.sub_victima }}">{{ rec.sub_victima|title|default:"—" }}</td>
+                    <td class="text-xs">{{ rec.edad|title|default:"—" }}</td>
+                    <td class="text-xs">
+                        {% if rec.sexo == 'HOMBRE' %}
+                        <span class="inline-flex items-center gap-1 text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full text-xs">
+                            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block"></span>M
+                        </span>
+                        {% elif rec.sexo == 'MUJER' %}
+                        <span class="inline-flex items-center gap-1 text-pink-700 bg-pink-50 px-2 py-0.5 rounded-full text-xs">
+                            <span class="w-1.5 h-1.5 rounded-full bg-pink-500 inline-block"></span>F
+                        </span>
+                        {% else %}
+                        <span class="text-slate-300">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">{{ rec.nacionalidad|title|default:"—" }}</td>
+                    <td class="text-xs text-slate-500">{{ rec.provincia|title|default:"—" }}</td>
+                    <td class="text-xs font-medium">{{ rec.canton|title|default:"—" }}</td>
+                    <td class="text-xs text-slate-500">{{ rec.distrito|title|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="12" class="text-center py-12 text-slate-400">
+                        <svg class="w-10 h-10 mx-auto mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/>
+                        </svg>
+                        <p class="text-sm font-medium text-slate-500">No se encontraron registros</p>
+                        <p class="text-xs text-slate-400 mt-1">Intente ajustar los filtros o cargar el dataset.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ─── Pagination ────────────────────────────────────────────── -->
+{% if total_pages > 1 %}
+<nav class="flex items-center justify-center gap-1" aria-label="Paginación">
+
+    <!-- Previous -->
+    {% if page_obj.has_previous %}
+    <a href="?{% include 'partials/query_params.html' %}&page={{ page_obj.previous_page_number }}"
+       class="px-3 py-1.5 text-sm text-slate-600 border border-slate-300 rounded-lg hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors">
+        ←
+    </a>
+    {% else %}
+    <span class="px-3 py-1.5 text-sm text-slate-300 border border-slate-200 rounded-lg cursor-not-allowed">←</span>
+    {% endif %}
+
+    <!-- Page numbers -->
+    {% if page_range.0 > 1 %}
+    <a href="?{% include 'partials/query_params.html' %}&page=1"
+       class="px-3 py-1.5 text-sm text-slate-600 border border-slate-300 rounded-lg hover:border-primary hover:text-primary transition-colors">1</a>
+    {% if page_range.0 > 2 %}
+    <span class="px-2 text-slate-400 text-sm">…</span>
+    {% endif %}
+    {% endif %}
+
+    {% for p in page_range %}
+    {% if p == page_obj.number %}
+    <span class="px-3 py-1.5 text-sm font-semibold text-white bg-primary border border-primary rounded-lg">{{ p }}</span>
+    {% else %}
+    <a href="?{% include 'partials/query_params.html' %}&page={{ p }}"
+       class="px-3 py-1.5 text-sm text-slate-600 border border-slate-300 rounded-lg hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors">{{ p }}</a>
+    {% endif %}
+    {% endfor %}
+
+    {% if page_range|last < total_pages %}
+    {% if page_range|last < total_pages|add:"-1" %}
+    <span class="px-2 text-slate-400 text-sm">…</span>
+    {% endif %}
+    <a href="?{% include 'partials/query_params.html' %}&page={{ total_pages }}"
+       class="px-3 py-1.5 text-sm text-slate-600 border border-slate-300 rounded-lg hover:border-primary hover:text-primary transition-colors">{{ total_pages }}</a>
+    {% endif %}
+
+    <!-- Next -->
+    {% if page_obj.has_next %}
+    <a href="?{% include 'partials/query_params.html' %}&page={{ page_obj.next_page_number }}"
+       class="px-3 py-1.5 text-sm text-slate-600 border border-slate-300 rounded-lg hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors">
+        →
+    </a>
+    {% else %}
+    <span class="px-3 py-1.5 text-sm text-slate-300 border border-slate-200 rounded-lg cursor-not-allowed">→</span>
+    {% endif %}
+
+</nav>
+{% endif %}
+
+{% endblock %}

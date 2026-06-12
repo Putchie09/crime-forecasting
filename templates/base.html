@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Criminalidad Alajuela{% endblock %}</title>
+    <meta name="description" content="Sistema de pronóstico de criminalidad para la provincia de Alajuela, Costa Rica." />
+
+    <!-- Inter font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        primary: {
+                            DEFAULT: '#1B263B',
+                            50:  '#EEF1F6',
+                            100: '#D3DAEB',
+                            200: '#A7B5D7',
+                            300: '#7B90C3',
+                            400: '#4F6BAF',
+                            500: '#2E4F95',
+                            600: '#243F7A',
+                            700: '#1B2F5F',
+                            800: '#1B263B',
+                            900: '#0F1629',
+                        },
+                        accent: '#3B82F6',
+                        success: '#10B981',
+                        warning: '#F59E0B',
+                        danger:  '#EF4444',
+                    },
+                },
+            },
+        }
+    </script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        html { font-family: 'Inter', system-ui, sans-serif; }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Nav active underline */
+        .nav-link-active {
+            border-bottom: 2px solid #1B263B;
+            color: #1B263B !important;
+            font-weight: 600;
+        }
+
+        /* Smooth transitions */
+        .transition-all { transition: all 0.2s ease; }
+
+        /* Table hover */
+        .data-table tr:hover td { background-color: #f8fafc; }
+
+        /* Chart container */
+        .chart-container { position: relative; }
+
+        /* KPI card */
+        .kpi-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            transition: box-shadow 0.2s;
+        }
+        .kpi-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+
+        /* Method card */
+        .method-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.2s;
+            cursor: default;
+        }
+        .method-card:hover {
+            border-color: #1B263B;
+            box-shadow: 0 4px 12px rgba(27,38,59,0.08);
+            transform: translateY(-2px);
+        }
+
+        /* Best badge */
+        .badge-best {
+            background: #dbeafe;
+            color: #1d4ed8;
+            border-radius: 9999px;
+            padding: 2px 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* Loading spinner */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            width: 1.25rem; height: 1.25rem;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: inline-block;
+        }
+
+        /* Focus rings */
+        input:focus, select:focus {
+            outline: none;
+            border-color: #1B263B !important;
+            box-shadow: 0 0 0 3px rgba(27,38,59,0.1);
+        }
+
+        /* Table */
+        .pro-table th {
+            background: #1B263B;
+            color: white;
+            font-weight: 600;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 0.75rem 1rem;
+            white-space: nowrap;
+        }
+        .pro-table td {
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 0.875rem;
+            color: #334155;
+            white-space: nowrap;
+        }
+        .pro-table tr:last-child td { border-bottom: none; }
+        .pro-table tr:hover td { background: #f8fafc; }
+
+        /* Metrics table best row */
+        .metrics-best { background: #eff6ff !important; }
+        .metrics-best td { font-weight: 600; color: #1d4ed8; }
+    </style>
+
+    {% block extra_head %}{% endblock %}
+</head>
+
+<body class="h-full bg-slate-50 text-slate-900 antialiased">
+
+    <!-- ─── Navigation ───────────────────────────────────────────── -->
+    <header class="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav class="flex items-center justify-between h-14">
+
+                <!-- Brand -->
+                <a href="{% url 'forecasting:home' %}"
+                   class="flex items-center gap-2 text-primary font-bold text-lg tracking-tight no-underline hover:opacity-80 transition-opacity">
+                    Criminalidad Alajuela
+                </a>
+
+                <!-- Nav links -->
+                <div class="hidden sm:flex items-center gap-1">
+                    <a href="{% url 'forecasting:home' %}"
+                       class="px-3 py-2 text-sm text-slate-600 hover:text-primary font-medium transition-colors {% if request.resolver_match.url_name == 'home' %}nav-link-active{% endif %}">
+                       Inicio
+                    </a>
+                    <a href="{% url 'forecasting:forecast' %}"
+                       class="px-3 py-2 text-sm text-slate-600 hover:text-primary font-medium transition-colors {% if request.resolver_match.url_name == 'forecast' %}nav-link-active{% endif %}">
+                       Pronosticar
+                    </a>
+                    <a href="{% url 'forecasting:historical' %}"
+                       class="px-3 py-2 text-sm text-slate-600 hover:text-primary font-medium transition-colors {% if request.resolver_match.url_name == 'historical' %}nav-link-active{% endif %}">
+                       Datos históricos
+                    </a>
+                </div>
+
+                <!-- Mobile menu button -->
+                <button id="mobile-menu-btn" class="sm:hidden p-2 rounded-md text-slate-600 hover:text-primary hover:bg-slate-100">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+            </nav>
+
+            <!-- Mobile nav -->
+            <div id="mobile-nav" class="hidden sm:hidden pb-3 border-t border-slate-100">
+                <div class="flex flex-col gap-1 pt-2">
+                    <a href="{% url 'forecasting:home' %}" class="px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">Inicio</a>
+                    <a href="{% url 'forecasting:forecast' %}" class="px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">Pronosticar</a>
+                    <a href="{% url 'forecasting:historical' %}" class="px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">Datos históricos</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ─── Main Content ─────────────────────────────────────────── -->
+    <main class="{% block main_width %}max-w-7xl{% endblock %} mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- ─── Footer ───────────────────────────────────────────────── -->
+    <footer class="mt-16 border-t border-slate-200 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <p class="text-center text-sm text-slate-500">
+                &copy; 2026 Criminalidad Alajuela &mdash; IF-7200 &mdash; Dayanara, Keleny, Yoel
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu toggle
+        const btn = document.getElementById('mobile-menu-btn');
+        const nav = document.getElementById('mobile-nav');
+        if (btn && nav) {
+            btn.addEventListener('click', () => nav.classList.toggle('hidden'));
+        }
+    </script>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

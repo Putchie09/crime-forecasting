@@ -1,0 +1,675 @@
+{% extends "base.html" %}
+{% load l10n %}
+{% block title %}Pronosticar – Criminalidad Alajuela{% endblock %}
+
+{% block content %}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-primary">Pronóstico de criminalidad</h1>
+    <p class="text-slate-500 text-sm mt-1">Configure los parámetros y el sistema ejecutará automáticamente los cuatro modelos cuantitativos.</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+    <!-- ─── LEFT PANEL: Form ──────────────────────────────────────── -->
+    <div class="lg:col-span-1">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden sticky top-20">
+
+            <div class="px-5 py-4 border-b border-slate-100">
+                <h2 class="font-semibold text-primary text-sm">Parámetros</h2>
+            </div>
+
+            <form method="post" action="{% url 'forecasting:forecast' %}" id="forecastForm" class="p-5 space-y-4">
+                {% csrf_token %}
+
+                <!-- Cantón -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Cantón</label>
+                    <select name="canton" required
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10">
+                        <option value="">Seleccionar cantón…</option>
+                        {% for c in cantons %}
+                        <option value="{{ c }}" {% if form_data.canton == c %}selected{% endif %}>{{ c|title }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Tipo de delito -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Tipo de delito</label>
+                    <select name="delito" required
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10">
+                        <option value="">Seleccionar delito…</option>
+                        <option value="__ALL__" {% if form_data.delito == '__ALL__' %}selected{% endif %}>— Todos los delitos —</option>
+                        {% for d in delitos %}
+                        <option value="{{ d }}" {% if form_data.delito == d %}selected{% endif %}>{{ d|title }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Date range -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Fecha inicio</label>
+                    <input type="date" name="date_from" value="{{ form_data.date_from }}"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10" />
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Fecha fin</label>
+                    <input type="date" name="date_to" value="{{ form_data.date_to }}"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10" />
+                </div>
+
+                <!-- Months to forecast -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">
+                        Meses a pronosticar
+                    </label>
+                    <input type="number" name="n_months" min="1" max="36"
+                        value="{{ form_data.n_months|default:'6' }}"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10" />
+                    <p class="text-xs text-slate-400 mt-1">Máximo 36 meses</p>
+                </div>
+
+                <!-- Submit -->
+                <button type="submit" id="submitBtn"
+                    class="w-full flex items-center justify-center gap-2 bg-primary text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-primary-700 active:scale-95 transition-all shadow-sm">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/>
+                    </svg>
+                    Generar pronóstico
+                </button>
+
+                {% if showed_results and success %}
+                <!-- Export PDF -->
+                <button type="submit" formaction="{% url 'forecasting:export_pdf' %}"
+                    class="w-full flex items-center justify-center gap-2 bg-white border border-slate-300 text-slate-700 py-2.5 rounded-lg text-sm font-medium hover:border-primary hover:text-primary hover:bg-primary/5 transition-all">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+                    </svg>
+                    Exportar reporte PDF
+                </button>
+                {% endif %}
+            </form>
+
+            <!-- Errors -->
+            {% if form_errors %}
+            <div class="mx-5 mb-5 bg-red-50 border border-red-200 rounded-lg p-3">
+                {% for err in form_errors %}
+                <p class="text-xs text-red-600">• {{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ─── RIGHT PANEL: Results ─────────────────────────────────── -->
+    <div class="lg:col-span-3 space-y-6">
+
+        {% if not showed_results %}
+        <!-- Empty state -->
+        <div class="bg-white rounded-xl border border-slate-200 p-12 text-center">
+            <div class="w-16 h-16 bg-primary/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-primary/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6"/>
+                </svg>
+            </div>
+            <h3 class="text-base font-semibold text-slate-700 mb-1">Configure los parámetros del pronóstico</h3>
+            <p class="text-sm text-slate-400 max-w-sm mx-auto">
+                Seleccione un cantón, tipo de delito y rango de fechas. El sistema ejecutará automáticamente todos los modelos cuantitativos.
+            </p>
+        </div>
+
+        {% elif error %}
+        <!-- Error state -->
+        <div class="bg-red-50 border border-red-200 rounded-xl p-6">
+            <div class="flex gap-3">
+                <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z"/>
+                </svg>
+                <div>
+                    <h3 class="text-sm font-semibold text-red-800 mb-1">Error al generar pronóstico</h3>
+                    <p class="text-sm text-red-700">{{ error }}</p>
+                    {% if model_errors %}
+                    <div class="mt-2 space-y-1">
+                        {% for k, v in model_errors.items %}
+                        <p class="text-xs text-red-600">{{ k }}: {{ v }}</p>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% else %}
+        <!-- ─── SUCCESS: Results ─────────────────────────────────── -->
+
+        <!-- Best method banner -->
+        <div class="bg-primary rounded-xl p-5 text-white">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-primary-200 text-xs font-semibold uppercase tracking-wider mb-1">Mejor método encontrado</p>
+                    <h2 class="text-xl font-bold">{{ best_method }}</h2>
+                    <p class="text-primary-200 text-sm mt-1">
+                        Pronóstico para <strong class="text-white">{{ canton|title }}</strong> —
+                        <strong class="text-white">{% if is_all_delitos %}Todos los delitos{% else %}{{ delito|title }}{% endif %}</strong>
+                    </p>
+                </div>
+                <div class="flex gap-4 text-right flex-shrink-0">
+                    <div>
+                        <p class="text-primary-300 text-xs">DMA (MAE)</p>
+                        <p class="text-2xl font-bold">{{ best_mae }}</p>
+                    </div>
+                    <div>
+                        <p class="text-primary-300 text-xs">Precisión</p>
+                        <p class="text-2xl font-bold">{{ best_accuracy }}%</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if is_all_delitos %}
+        <!-- Informative note -->
+        <div class="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-start gap-3">
+            <svg class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z"/>
+            </svg>
+            <p class="text-xs text-amber-800 leading-relaxed">
+                Este análisis representa la suma de todos los delitos registrados en el cantón.
+                Para análisis específicos y decisiones focalizadas, seleccione un tipo de delito individual.
+            </p>
+        </div>
+
+        {% if composition_data %}
+        <!-- Composición histórica de delitos -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 bg-slate-50">
+                <h3 class="text-sm font-semibold text-primary">Composición histórica de delitos</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Distribución porcentual por tipo de delito — {{ canton|title }}</p>
+            </div>
+            <div class="p-5">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                    <div style="height:240px; position:relative;">
+                        <canvas id="compositionChart"></canvas>
+                    </div>
+                    <div class="space-y-2.5">
+                        {% for item in composition_data %}
+                        <div class="flex items-center justify-between text-sm gap-3">
+                            <span class="text-slate-700 min-w-0 truncate">{{ item.delito }}</span>
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                                <div class="w-20 bg-slate-100 rounded-full h-1.5">
+                                    <div class="bg-primary rounded-full h-1.5" style="width:{{ item.pct|unlocalize }}%"></div>
+                                </div>
+                                <span class="font-mono text-slate-600 text-xs w-10 text-right">{{ item.pct }}%</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
+
+        <!-- Model parameters card -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 bg-slate-50">
+                <h3 class="text-sm font-semibold text-primary">Parámetros del modelo — {{ best_method }}</h3>
+                <p class="text-xs text-slate-500 mt-0.5">{{ best_description }}</p>
+            </div>
+            <div class="p-5">
+                {% if best_method_key == 'linear_trend' %}
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-slate-50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-slate-500 mb-1">Intercepto (a)</p>
+                        <p class="text-lg font-bold text-primary font-mono">{{ best_params.intercept_a }}</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-slate-500 mb-1">Pendiente (b)</p>
+                        <p class="text-lg font-bold text-primary font-mono">{{ best_params.slope_b }}</p>
+                    </div>
+                    <div class="bg-blue-50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-blue-600 mb-1">Ecuación del modelo</p>
+                        <p class="text-sm font-semibold text-blue-800 font-mono">Y(t) = {{ best_params.intercept_a }} + {{ best_params.slope_b }}×t</p>
+                    </div>
+                </div>
+
+                {% elif best_method_key == 'exponential_smoothing' %}
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-blue-50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-blue-600 mb-1">Parámetro α (óptimo)</p>
+                        <p class="text-2xl font-bold text-blue-800 font-mono">{{ best_params.alpha }}</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-slate-500 mb-1">Valor inicial S₁</p>
+                        <p class="text-lg font-bold text-primary font-mono">{{ best_params.initial_value }}</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-slate-500 mb-1">Último valor suavizado</p>
+                        <p class="text-lg font-bold text-primary font-mono">{{ best_params.last_smoothed }}</p>
+                    </div>
+                </div>
+                <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+                    Advertencia: el SES proyecta un nivel constante para todos los períodos futuros (no modela tendencia ni estacionalidad).
+                </p>
+
+                {% elif best_method_key == 'seasonal_index' or best_method_key == 'multiplicative_decomposition' %}
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="bg-slate-50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-slate-500 mb-1">Intercepto tendencia (a)</p>
+                        <p class="text-lg font-bold text-primary font-mono">{{ best_params.trend_intercept }}</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-slate-500 mb-1">Pendiente tendencia (b)</p>
+                        <p class="text-lg font-bold text-primary font-mono">{{ best_params.trend_slope }}</p>
+                    </div>
+                </div>
+                <p class="text-xs font-semibold text-slate-600 mb-2">Índices estacionales mensuales</p>
+                <div class="grid grid-cols-6 gap-2">
+                    {% for si in best_seasonal_list %}
+                    <div class="bg-slate-50 rounded-lg p-2 text-center">
+                        <p class="text-xs text-slate-500">{{ si.month_name }}</p>
+                        <p class="text-sm font-bold {% if si.value > 1 %}text-red-600{% else %}text-green-700{% endif %} font-mono">{{ si.value }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Main chart: Historical + Forecast -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-primary">Histórico vs. Pronóstico</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Datos reales y valores proyectados por el mejor modelo</p>
+                </div>
+                <div class="flex items-center gap-4 text-xs text-slate-500">
+                    <span class="flex items-center gap-1.5">
+                        <span class="w-3 h-0.5 bg-primary inline-block rounded"></span>Histórico
+                    </span>
+                    <span class="flex items-center gap-1.5">
+                        <span class="w-3 h-0.5 bg-blue-500 inline-block rounded" style="border-top:2px dashed #3b82f6; height:0"></span>
+                        <span class="border-t-2 border-blue-500 border-dashed w-4 inline-block"></span>Pronóstico
+                    </span>
+                </div>
+            </div>
+            <div class="chart-container" style="height:300px">
+                <canvas id="mainForecastChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Comparación entre métodos (ancho completo) -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-primary">Comparación entre métodos</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Valores ajustados de cada modelo vs. datos reales</p>
+                </div>
+            </div>
+            <div class="chart-container" style="height:300px">
+                <canvas id="methodsComparisonChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Métricas de rendimiento (ancho completo) -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100">
+                <h3 class="text-sm font-semibold text-primary">Métricas de rendimiento</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Comparación de todos los modelos — ordenados por DMA (menor es mejor)</p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full pro-table text-left">
+                    <thead>
+                        <tr>
+                            <th>Método</th>
+                            <th class="text-center">DMA</th>
+                            <th class="text-center">MSE</th>
+                            <th class="text-center">RMSE</th>
+                            <th class="text-center">Precisión</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in metrics_comparison %}
+                        <tr {% if m.is_best %}class="metrics-best"{% endif %}>
+                            <td class="font-medium">
+                                {% if m.is_best %}
+                                <span class="inline-flex items-center gap-1.5">
+                                    <svg class="w-3.5 h-3.5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                    </svg>
+                                    {{ m.method }}
+                                </span>
+                                {% else %}
+                                {{ m.method }}
+                                {% endif %}
+                            </td>
+                            <td class="text-center font-mono">{{ m.mae }}</td>
+                            <td class="text-center font-mono text-slate-500">{{ m.mse }}</td>
+                            <td class="text-center font-mono text-slate-500">{{ m.rmse }}</td>
+                            <td class="text-center">
+                                <span class="{% if m.is_best %}text-blue-700 font-bold{% else %}text-slate-600{% endif %}">
+                                    {{ m.accuracy }}%
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Forecast table -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div>
+                    <h3 class="text-sm font-semibold text-primary">Tabla de pronóstico — {{ n_months }} meses</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Proyección generada por {{ best_method }}</p>
+                </div>
+                <span class="badge-best">{{ best_method }}</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full pro-table text-left">
+                    <thead>
+                        <tr>
+                            <th>Período</th>
+                            <th>Mes</th>
+                            <th>Año</th>
+                            <th class="text-right">Pronóstico (delitos)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in forecast_table %}
+                        <tr>
+                            <td class="font-mono text-slate-600">{{ row.period }}</td>
+                            <td>{{ row.month_name }}</td>
+                            <td>{{ row.year }}</td>
+                            <td class="text-right font-bold text-primary text-base">{{ row.value }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Interpretation -->
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-5">
+            <div class="flex items-start gap-3">
+                <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-sm font-semibold text-blue-900 mb-1">Interpretación automática</h3>
+                    <p class="text-sm text-blue-800 leading-relaxed">{{ interpretation|safe }}</p>
+                </div>
+            </div>
+        </div>
+
+        {% endif %} {# end success #}
+    </div> {# end right panel #}
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+{% if showed_results and success %}
+<script>
+// ── Data from Django ─────────────────────────────────────────────
+const historicalLabels = {{ js_historical_labels|safe }};
+const historicalValues = {{ js_historical_values|safe }};
+const forecastLabels   = {{ js_forecast_labels|safe }};
+const bestFitted       = {{ js_best_fitted|safe }};
+const bestForecast     = {{ js_best_forecast|safe }};
+const methodsData      = {{ js_methods_data|safe }};
+
+const PRIMARY = '#1B263B';
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444'];
+
+// ── 1. Main forecast chart (Historical + Forecast) ───────────────
+(function() {
+    const ctx = document.getElementById('mainForecastChart');
+    if (!ctx) return;
+
+    // Combine labels: all historical + forecast
+    const allLabels = [...historicalLabels, ...forecastLabels];
+
+    // Historical data: fill forecastLabels with null
+    const historicalSeries = [...historicalValues, ...forecastLabels.map(() => null)];
+
+    // Fitted (best model in-sample): fill forecastLabels with null
+    const fittedSeries = [...bestFitted, ...forecastLabels.map(() => null)];
+
+    // Forecast: fill historicalLabels with null, then forecast
+    const forecastSeries = [...historicalLabels.map(() => null), ...bestForecast];
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: allLabels,
+            datasets: [
+                {
+                    label: 'Datos reales',
+                    data: historicalSeries,
+                    borderColor: PRIMARY,
+                    backgroundColor: 'rgba(27,38,59,0.05)',
+                    borderWidth: 2,
+                    pointRadius: allLabels.length > 36 ? 2 : 4,
+                    pointHoverRadius: 6,
+                    fill: true,
+                    tension: 0.3,
+                    spanGaps: false,
+                },
+                {
+                    label: 'Ajustado (modelo)',
+                    data: fittedSeries,
+                    borderColor: '#10B981',
+                    borderWidth: 1.5,
+                    borderDash: [4, 4],
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.3,
+                    spanGaps: false,
+                },
+                {
+                    label: 'Pronóstico',
+                    data: forecastSeries,
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59,130,246,0.08)',
+                    borderWidth: 2.5,
+                    borderDash: [8, 4],
+                    pointBackgroundColor: '#3B82F6',
+                    pointRadius: 4,
+                    pointHoverRadius: 7,
+                    fill: true,
+                    tension: 0.3,
+                    spanGaps: false,
+                },
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        font: { family: 'Inter', size: 11 },
+                        usePointStyle: true,
+                        boxWidth: 10,
+                        padding: 16,
+                    }
+                },
+                tooltip: {
+                    backgroundColor: PRIMARY,
+                    titleFont: { family: 'Inter', size: 12 },
+                    bodyFont: { family: 'Inter', size: 11 },
+                    padding: 12,
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        maxTicksLimit: 16,
+                        font: { family: 'Inter', size: 10 },
+                        color: '#94a3b8',
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: '#f1f5f9' },
+                    ticks: {
+                        font: { family: 'Inter', size: 10 },
+                        color: '#94a3b8',
+                    }
+                }
+            }
+        }
+    });
+})();
+
+// ── 2. Methods comparison chart ──────────────────────────────────
+(function() {
+    const ctx = document.getElementById('methodsComparisonChart');
+    if (!ctx) return;
+
+    const datasets = [
+        {
+            label: 'Datos reales',
+            data: historicalValues,
+            borderColor: PRIMARY,
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.3,
+        }
+    ];
+
+    const methodKeys = Object.keys(methodsData);
+    methodKeys.forEach((key, idx) => {
+        const m = methodsData[key];
+        datasets.push({
+            label: m.name,
+            data: m.fitted,
+            borderColor: COLORS[idx % COLORS.length],
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            borderDash: [4, 3],
+            pointRadius: 0,
+            tension: 0.3,
+        });
+    });
+
+    new Chart(ctx, {
+        type: 'line',
+        data: { labels: historicalLabels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        font: { family: 'Inter', size: 10 },
+                        usePointStyle: true,
+                        boxWidth: 8,
+                        padding: 8,
+                    }
+                },
+                tooltip: {
+                    backgroundColor: PRIMARY,
+                    titleFont: { family: 'Inter', size: 11 },
+                    bodyFont: { family: 'Inter', size: 10 },
+                    padding: 10,
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { maxTicksLimit: 8, font: { size: 9 }, color: '#94a3b8' }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: '#f1f5f9' },
+                    ticks: { font: { size: 9 }, color: '#94a3b8' }
+                }
+            }
+        }
+    });
+})();
+
+{% if is_all_delitos and composition_data %}
+// ── 3. Composition doughnut chart ────────────────────────────────
+(function() {
+    const ctx = document.getElementById('compositionChart');
+    if (!ctx) return;
+    const compData = {{ js_composition_data|safe }};
+    const DOUGHNUT_COLORS = [
+        '#1B263B','#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#EC4899','#06B6D4'
+    ];
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: compData.map(d => d.delito + ' (' + d.pct + '%)'),
+            datasets: [{
+                data: compData.map(d => d.total),
+                backgroundColor: DOUGHNUT_COLORS.slice(0, compData.length),
+                borderWidth: 2,
+                borderColor: '#fff',
+                hoverOffset: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        font: { family: 'Inter', size: 10 },
+                        padding: 10,
+                        usePointStyle: true,
+                        boxWidth: 10,
+                    }
+                },
+                tooltip: {
+                    backgroundColor: PRIMARY,
+                    titleFont: { family: 'Inter', size: 11 },
+                    bodyFont: { family: 'Inter', size: 10 },
+                    padding: 10,
+                    callbacks: {
+                        label: function(ctx) {
+                            return ' ' + ctx.parsed.toLocaleString('es-CR') + ' delitos';
+                        }
+                    }
+                }
+            }
+        }
+    });
+})();
+{% endif %}
+
+// ── Loading button state ─────────────────────────────────────────
+document.getElementById('forecastForm')?.addEventListener('submit', function(e) {
+    const btn = document.getElementById('submitBtn');
+    if (btn && e.submitter === btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner mr-2"></span>Calculando…';
+    }
+});
+</script>
+{% else %}
+<script>
+document.getElementById('forecastForm')?.addEventListener('submit', function(e) {
+    const btn = document.getElementById('submitBtn');
+    if (btn && e.submitter === btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner mr-2"></span>Calculando…';
+    }
+});
+</script>
+{% endif %}
+{% endblock %}
