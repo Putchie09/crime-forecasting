@@ -182,7 +182,7 @@
         {% if composition_data %}
         <!-- Composición histórica de delitos -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="px-5 py-3 border-b border-slate-100 bg-slate-50">
+            <div class="px-5 py-4 border-b border-slate-100">
                 <h3 class="text-sm font-semibold text-primary">Composición histórica de delitos</h3>
                 <p class="text-xs text-slate-500 mt-0.5">Distribución porcentual por tipo de delito — {{ canton|title }}</p>
             </div>
@@ -212,62 +212,62 @@
 
         <!-- Model parameters card -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="px-5 py-3 border-b border-slate-100 bg-slate-50">
+            <div class="px-5 py-4 border-b border-slate-100">
                 <h3 class="text-sm font-semibold text-primary">Parámetros del modelo — {{ best_method }}</h3>
                 <p class="text-xs text-slate-500 mt-0.5">{{ best_description }}</p>
             </div>
             <div class="p-5">
                 {% if best_method_key == 'linear_trend' %}
-                <div class="grid grid-cols-3 gap-4">
-                    <div class="bg-slate-50 rounded-lg p-3 text-center">
-                        <p class="text-xs text-slate-500 mb-1">Intercepto (a)</p>
+                <div class="flex flex-wrap items-start gap-8">
+                    <div>
+                        <p class="text-xs text-slate-500 mb-0.5">Intercepto (a)</p>
                         <p class="text-lg font-bold text-primary font-mono">{{ best_params.intercept_a }}</p>
                     </div>
-                    <div class="bg-slate-50 rounded-lg p-3 text-center">
-                        <p class="text-xs text-slate-500 mb-1">Pendiente (b)</p>
+                    <div>
+                        <p class="text-xs text-slate-500 mb-0.5">Pendiente (b)</p>
                         <p class="text-lg font-bold text-primary font-mono">{{ best_params.slope_b }}</p>
                     </div>
-                    <div class="bg-blue-50 rounded-lg p-3 text-center">
-                        <p class="text-xs text-blue-600 mb-1">Ecuación del modelo</p>
-                        <p class="text-sm font-semibold text-blue-800 font-mono">Y(t) = {{ best_params.intercept_a }} + {{ best_params.slope_b }}×t</p>
+                    <div class="pl-8 border-l border-slate-200">
+                        <p class="text-xs text-slate-500 mb-0.5">Ecuación del modelo</p>
+                        <p class="text-sm font-semibold text-primary font-mono">Y(t) = {{ best_params.intercept_a }} + {{ best_params.slope_b }}×t</p>
                     </div>
                 </div>
 
                 {% elif best_method_key == 'exponential_smoothing' %}
-                <div class="grid grid-cols-3 gap-4">
-                    <div class="bg-blue-50 rounded-lg p-3 text-center">
-                        <p class="text-xs text-blue-600 mb-1">Parámetro α (óptimo)</p>
-                        <p class="text-2xl font-bold text-blue-800 font-mono">{{ best_params.alpha }}</p>
+                <div class="flex flex-wrap items-start gap-8">
+                    <div>
+                        <p class="text-xs text-slate-500 mb-0.5">Parámetro α (óptimo)</p>
+                        <p class="text-2xl font-bold text-primary font-mono">{{ best_params.alpha }}</p>
                     </div>
-                    <div class="bg-slate-50 rounded-lg p-3 text-center">
-                        <p class="text-xs text-slate-500 mb-1">Valor inicial S₁</p>
+                    <div>
+                        <p class="text-xs text-slate-500 mb-0.5">Valor inicial S₁</p>
                         <p class="text-lg font-bold text-primary font-mono">{{ best_params.initial_value }}</p>
                     </div>
-                    <div class="bg-slate-50 rounded-lg p-3 text-center">
-                        <p class="text-xs text-slate-500 mb-1">Último valor suavizado</p>
+                    <div>
+                        <p class="text-xs text-slate-500 mb-0.5">Último valor suavizado</p>
                         <p class="text-lg font-bold text-primary font-mono">{{ best_params.last_smoothed }}</p>
                     </div>
                 </div>
-                <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
-                    Advertencia: el SES proyecta un nivel constante para todos los períodos futuros (no modela tendencia ni estacionalidad).
+                <p class="text-xs text-slate-600 border-l-2 border-amber-400 pl-3 mt-4 leading-relaxed">
+                    El SES proyecta un nivel constante para todos los períodos futuros — no modela tendencia ni estacionalidad.
                 </p>
 
                 {% elif best_method_key == 'seasonal_index' or best_method_key == 'multiplicative_decomposition' %}
-                <div class="grid grid-cols-2 gap-4 mb-4">
-                    <div class="bg-slate-50 rounded-lg p-3 text-center">
-                        <p class="text-xs text-slate-500 mb-1">Intercepto tendencia (a)</p>
+                <div class="flex flex-wrap items-start gap-8 mb-5">
+                    <div>
+                        <p class="text-xs text-slate-500 mb-0.5">Intercepto tendencia (a)</p>
                         <p class="text-lg font-bold text-primary font-mono">{{ best_params.trend_intercept }}</p>
                     </div>
-                    <div class="bg-slate-50 rounded-lg p-3 text-center">
-                        <p class="text-xs text-slate-500 mb-1">Pendiente tendencia (b)</p>
+                    <div>
+                        <p class="text-xs text-slate-500 mb-0.5">Pendiente tendencia (b)</p>
                         <p class="text-lg font-bold text-primary font-mono">{{ best_params.trend_slope }}</p>
                     </div>
                 </div>
-                <p class="text-xs font-semibold text-slate-600 mb-2">Índices estacionales mensuales</p>
-                <div class="grid grid-cols-6 gap-2">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Índices estacionales mensuales</p>
+                <div class="grid grid-cols-4 sm:grid-cols-6 gap-2">
                     {% for si in best_seasonal_list %}
-                    <div class="bg-slate-50 rounded-lg p-2 text-center">
-                        <p class="text-xs text-slate-500">{{ si.month_name }}</p>
+                    <div class="border border-slate-100 rounded p-2 text-center">
+                        <p class="text-xs text-slate-400">{{ si.month_name }}</p>
                         <p class="text-sm font-bold {% if si.value > 1 %}text-red-600{% else %}text-green-700{% endif %} font-mono">{{ si.value }}</p>
                     </div>
                     {% endfor %}
@@ -298,11 +298,11 @@
             </div>
         </div>
 
-        <!-- Comparación entre métodos (ancho completo) -->
+        <!-- Ajuste de modelos al período histórico -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
             <div class="flex items-center justify-between mb-4">
                 <div>
-                    <h3 class="text-sm font-semibold text-primary">Comparación entre métodos</h3>
+                    <h3 class="text-sm font-semibold text-primary">Ajuste de modelos al período histórico</h3>
                     <p class="text-xs text-slate-500 mt-0.5">Valores ajustados de cada modelo vs. datos reales</p>
                 </div>
             </div>
@@ -360,12 +360,9 @@
 
         <!-- Forecast table -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                <div>
-                    <h3 class="text-sm font-semibold text-primary">Tabla de pronóstico — {{ n_months }} meses</h3>
-                    <p class="text-xs text-slate-500 mt-0.5">Proyección generada por {{ best_method }}</p>
-                </div>
-                <span class="badge-best">{{ best_method }}</span>
+            <div class="px-5 py-4 border-b border-slate-100">
+                <h3 class="text-sm font-semibold text-primary">Tabla de pronóstico — {{ n_months }} meses</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Proyección generada por {{ best_method }}</p>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full pro-table text-left">
@@ -392,18 +389,9 @@
         </div>
 
         <!-- Interpretation -->
-        <div class="bg-blue-50 border border-blue-200 rounded-xl p-5">
-            <div class="flex items-start gap-3">
-                <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"/>
-                    </svg>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-blue-900 mb-1">Interpretación automática</h3>
-                    <p class="text-sm text-blue-800 leading-relaxed">{{ interpretation|safe }}</p>
-                </div>
-            </div>
+        <div class="bg-white rounded-xl p-5 border border-slate-200" style="border-left: 4px solid #1B263B;">
+            <h3 class="text-sm font-semibold text-primary mb-2">Interpretación automática</h3>
+            <p class="text-sm text-slate-600 leading-relaxed">{{ interpretation|safe }}</p>
         </div>
 
         {% endif %} {# end success #}

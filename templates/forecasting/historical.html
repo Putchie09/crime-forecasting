@@ -156,13 +156,9 @@
                     <td class="text-xs">{{ rec.edad|title|default:"—" }}</td>
                     <td class="text-xs">
                         {% if rec.sexo == 'HOMBRE' %}
-                        <span class="inline-flex items-center gap-1 text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full text-xs">
-                            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block"></span>M
-                        </span>
+                        <span class="text-blue-700 font-medium">M</span>
                         {% elif rec.sexo == 'MUJER' %}
-                        <span class="inline-flex items-center gap-1 text-pink-700 bg-pink-50 px-2 py-0.5 rounded-full text-xs">
-                            <span class="w-1.5 h-1.5 rounded-full bg-pink-500 inline-block"></span>F
-                        </span>
+                        <span class="text-pink-600 font-medium">F</span>
                         {% else %}
                         <span class="text-slate-300">—</span>
                         {% endif %}

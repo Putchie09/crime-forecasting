@@ -4,12 +4,10 @@
 {% block content %}
 
 <!-- ─── Hero Section ───────────────────────────────────────────── -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start mb-16">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start mb-10">
 
     <!-- Left: Text -->
-    <div>
-
-        <br>
+    <div class="pt-4">
         <h1 class="text-4xl font-extrabold text-primary leading-tight mb-4">
             Sistema de pronóstico de<br>Criminalidad de Alajuela
         </h1>
@@ -62,29 +60,29 @@
 
 <!-- ─── KPI Cards ────────────────────────────────────────────────── -->
 {% if data_loaded %}
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-16">
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
 
     <div class="kpi-card">
         <p class="text-xs text-slate-500 uppercase font-semibold tracking-wide mb-1">Registros totales</p>
-        <p class="text-3xl font-extrabold text-primary">{{ total_records|floatformat:"0" }}</p>
+        <p class="text-2xl font-bold text-primary">{{ total_records|floatformat:"0" }}</p>
         <p class="text-xs text-slate-500 mt-1">eventos delictivos registrados</p>
     </div>
 
     <div class="kpi-card">
         <p class="text-xs text-slate-500 uppercase font-semibold tracking-wide mb-1">Cantones</p>
-        <p class="text-3xl font-extrabold text-primary">{{ total_cantons }}</p>
+        <p class="text-2xl font-bold text-primary">{{ total_cantons }}</p>
         <p class="text-xs text-slate-500 mt-1">en la provincia de Alajuela</p>
     </div>
 
     <div class="kpi-card">
         <p class="text-xs text-slate-500 uppercase font-semibold tracking-wide mb-1">Tipos de delito</p>
-        <p class="text-3xl font-extrabold text-primary">{{ total_delitos }}</p>
+        <p class="text-2xl font-bold text-primary">{{ total_delitos }}</p>
         <p class="text-xs text-slate-500 mt-1">categorías disponibles</p>
     </div>
 
     <div class="kpi-card">
         <p class="text-xs text-slate-500 uppercase font-semibold tracking-wide mb-1">Período de datos</p>
-        <p class="text-xl font-extrabold text-primary leading-tight mt-1">
+        <p class="text-2xl font-bold text-primary leading-tight mt-1">
             {% if fecha_min %}{{ fecha_min|date:"Y" }}{% else %}—{% endif %}
             –
             {% if fecha_max %}{{ fecha_max|date:"Y" }}{% else %}—{% endif %}
@@ -98,9 +96,8 @@
 
 <!-- ─── Methodology Cards ────────────────────────────────────────── -->
 <div class="mb-8">
-    <div class="flex items-center gap-2 mb-6">
+    <div class="mb-6">
         <h2 class="text-xl font-bold text-primary">Metodologías de análisis</h2>
-        <div class="flex-1 h-px bg-slate-200"></div>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
