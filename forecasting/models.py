@@ -62,3 +62,24 @@ class MonthlySeries(models.Model):
     def period_label(self):
         """Returns a formatted period string like '2024-01'."""
         return f"{self.year}-{self.month:02d}"
+
+
+class DataImportLog(models.Model):
+    """
+    Records each automatic or manual dataset import.
+    Used by the startup service to detect whether the Excel file
+    has changed since the last import, avoiding unnecessary re-processing.
+    """
+    imported_at = models.DateTimeField(auto_now_add=True, verbose_name='Importado en')
+    file_path = models.CharField(max_length=500, verbose_name='Ruta del archivo')
+    file_mtime = models.FloatField(verbose_name='Timestamp de modificación del archivo')
+    crime_records = models.IntegerField(verbose_name='Registros importados')
+    monthly_series = models.IntegerField(verbose_name='Series mensuales generadas')
+
+    class Meta:
+        verbose_name = 'Registro de Importación'
+        verbose_name_plural = 'Registros de Importación'
+        ordering = ['-imported_at']
+
+    def __str__(self):
+        return f"Importación {self.imported_at.strftime('%Y-%m-%d %H:%M')} — {self.crime_records:,} registros"

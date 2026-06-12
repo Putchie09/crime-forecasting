@@ -66,6 +66,15 @@ class Command(BaseCommand):
             self.stdout.write("Importando a la base de datos...")
             result = import_to_database(df, series)
 
+            # Register the import so the auto-import check can skip next startup
+            from forecasting.models import DataImportLog
+            DataImportLog.objects.create(
+                file_path=str(dataset_path),
+                file_mtime=dataset_path.stat().st_mtime,
+                crime_records=result['crime_records'],
+                monthly_series=result['monthly_series'],
+            )
+
             self.stdout.write("")
             self.stdout.write(self.style.SUCCESS("Dataset importado exitosamente:"))
             self.stdout.write(f"   - Registros de delitos : {result['crime_records']:,}")

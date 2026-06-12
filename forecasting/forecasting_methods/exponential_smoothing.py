@@ -75,10 +75,11 @@ def fit_and_forecast(values: List[float], n_forecast: int) -> dict:
     fitted = np.maximum(fitted, 0)
     forecast = np.maximum(forecast, 0)
 
-    # Metrics over all points (consistent with other methods)
-    errors = np.abs(y - fitted)
-    mae = float(np.mean(errors))
-    mse = float(np.mean((y - fitted) ** 2))
+    # One-step-ahead errors: y[t] vs smoothed[t-1], excluding t=0 where
+    # fitted[0] == y[0] by construction and would artificially deflate MAE.
+    osa_errors = y[1:] - smoothed[:-1]
+    mae = float(np.mean(np.abs(osa_errors)))
+    mse = float(np.mean(osa_errors ** 2))
     rmse = float(np.sqrt(mse))
     mean_y = float(np.mean(y)) if np.mean(y) != 0 else 1.0
     accuracy = max(0.0, float((1 - mae / mean_y) * 100))

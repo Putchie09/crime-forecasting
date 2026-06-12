@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import CrimeRecord, MonthlySeries
+from .models import CrimeRecord, MonthlySeries, DataImportLog
 
 
 @admin.register(CrimeRecord)
@@ -17,3 +17,10 @@ class MonthlySeriesAdmin(admin.ModelAdmin):
     list_filter = ['canton', 'delito', 'year']
     search_fields = ['canton', 'delito']
     ordering = ['canton', 'delito', 'year', 'month']
+
+
+@admin.register(DataImportLog)
+class DataImportLogAdmin(admin.ModelAdmin):
+    list_display = ['imported_at', 'crime_records', 'monthly_series', 'file_path']
+    ordering = ['-imported_at']
+    readonly_fields = ['imported_at', 'file_path', 'file_mtime', 'crime_records', 'monthly_series']
