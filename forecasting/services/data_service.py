@@ -36,6 +36,17 @@ COLUMN_ALIASES = {
     'DISTRITO': 'Distrito',
 }
 
+# Cantones que pertenecen a la provincia de Alajuela según división territorial de Costa Rica.
+# Se usan como respaldo cuando el campo Provincia está vacío.
+CANTONES_ALAJUELA = {
+    'ALAJUELA', 'SAN RAMÓN', 'GRECIA', 'SAN MATEO', 'ATENAS',
+    'NARANJO', 'PALMARES', 'POÁS', 'OROTINA', 'SAN CARLOS',
+    'ZARCERO', 'SARCHÍ', 'UPALA', 'LOS CHILES', 'GUATUSO',
+    'RÍO CUARTO',
+    # Variantes sin tildes (frecuentes en datasets OIJ)
+    'SAN RAMON', 'POAS', 'SARCHI', 'RIO CUARTO',
+}
+
 
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize column names, handling case and accent variants."""
@@ -47,10 +58,11 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=rename_map)
 
 
-def load_dataset(path: Path = None) -> pd.DataFrame:
+def load_dataset(path: Path = None) -> tuple[pd.DataFrame, list]:
     """
     Load dataset from Excel or CSV.
-    Returns clean DataFrame with standardized columns.
+    Returns (clean_df, audit_report) where audit_report is a list of dicts
+    describing each cleaning step and its row impact.
     """
     if path is None:
         path = settings.DATASET_PATH
@@ -63,15 +75,17 @@ def load_dataset(path: Path = None) -> pd.DataFrame:
 
     suffix = path.suffix.lower()
     if suffix in ('.xlsx', '.xls', '.xlsm'):
-        df = pd.read_excel(path, dtype=str)
+        df = _read_excel_all_sheets(path)
     elif suffix == '.csv':
-        # Try common encodings for Spanish text
+        df = None
         for enc in ('utf-8', 'latin-1', 'cp1252'):
             try:
                 df = pd.read_csv(path, dtype=str, encoding=enc, sep=None, engine='python')
                 break
             except UnicodeDecodeError:
                 continue
+        if df is None:
+            raise ValueError("No se pudo decodificar el archivo CSV con ninguna codificación conocida.")
     else:
         raise ValueError(f"Unsupported file format: {suffix}")
 
@@ -80,57 +94,205 @@ def load_dataset(path: Path = None) -> pd.DataFrame:
     # Validate required columns
     missing = REQUIRED_COLUMNS - set(df.columns)
     if missing:
-        # Try partial match – perhaps columns exist but renamed
-        logger.warning(f"Missing columns: {missing}. Will proceed with available columns.")
+        logger.warning(f"Columnas no encontradas: {missing}. Se continúa con las columnas disponibles.")
 
     return clean_dataset(df)
 
 
-def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
+def _read_excel_all_sheets(path: Path) -> pd.DataFrame:
     """
-    Clean and normalize the dataset:
-    - Strip whitespace from string fields
-    - Parse and validate dates
-    - Uppercase categorical fields
-    - Drop invalid/incomplete rows
-    """
-    logger.info(f"Raw dataset shape: {df.shape}")
+    Read all sheets from an Excel file and concatenate them.
 
-    # Strip whitespace from all string columns
+    Logs a sheet-by-sheet breakdown so it's visible if rows are split across
+    multiple sheets (a common OIJ Excel format pattern).
+    """
+    all_sheets = pd.read_excel(path, dtype=str, sheet_name=None)
+
+    logger.info(f"Hojas en el archivo Excel: {list(all_sheets.keys())}")
+
+    frames = []
+    for sheet_name, sheet_df in all_sheets.items():
+        rows = len(sheet_df)
+        cols = list(sheet_df.columns)
+        logger.info(f"  Hoja '{sheet_name}': {rows:,} filas × {len(cols)} columnas — {cols}")
+        if rows > 0:
+            frames.append(sheet_df)
+
+    if not frames:
+        raise ValueError("El archivo Excel no contiene datos en ninguna hoja.")
+
+    if len(frames) == 1:
+        return frames[0].reset_index(drop=True)
+
+    # Multiple sheets: concatenate only sheets that share the same columns as the first
+    reference_cols = set(frames[0].columns)
+    compatible = [frames[0]]
+    skipped = []
+    for sheet_df in frames[1:]:
+        if set(sheet_df.columns) == reference_cols:
+            compatible.append(sheet_df)
+        else:
+            skipped.append(sheet_df.shape)
+
+    if skipped:
+        logger.warning(
+            f"{len(skipped)} hoja(s) omitida(s) por tener columnas distintas: {skipped}"
+        )
+
+    result = pd.concat(compatible, ignore_index=True)
+    logger.info(f"Total tras concatenar hojas compatibles: {len(result):,} filas")
+    return result
+
+
+def clean_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
+    """
+    Clean and normalize the dataset.
+
+    Cleaning strategy: only discard records that make it impossible to build
+    the time series (invalid date, missing canton, missing crime type).
+    All secondary fields (Hora, Sexo, Edad, Victima, etc.) are kept as-is
+    and stored as NULL when absent — they are never grounds for row elimination.
+
+    Returns:
+        (cleaned_df, audit_report)
+        audit_report: list of dicts with keys:
+            rule, justification, before, after, dropped, pct, classification
+    """
+    initial = len(df)
+    audit = []
+    logger.info(f"[Auditoría] Dataset inicial: {initial:,} registros × {len(df.columns)} columnas")
+
+    # ── 1. Normalizar espacios en columnas de texto ──────────────────────────
+    # NaN se convierte a la cadena 'nan' aquí; se revierte en el paso siguiente.
     str_cols = df.select_dtypes(include='object').columns
     for col in str_cols:
         df[col] = df[col].astype(str).str.strip()
 
-    # Remove rows where any value is literally 'nan' or empty
+    # ── 2. Unificar representaciones nulas ───────────────────────────────────
+    # Convierte strings vacíos y variantes de nulo a np.nan real.
     df.replace({'nan': np.nan, 'None': np.nan, '': np.nan}, inplace=True)
 
-    # Parse dates – handle multiple formats
-    if 'Fecha' in df.columns:
-        df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
-        invalid_dates = df['Fecha'].isna().sum()
-        if invalid_dates > 0:
-            logger.warning(f"Dropped {invalid_dates} rows with invalid/missing dates")
-        df = df.dropna(subset=['Fecha'])
-
-    # Require Delito and Canton
-    for col in ['Delito', 'Canton']:
+    # ── Diagnóstico: nulos en columnas clave ANTES de filtrar ────────────────
+    # Estos datos se incluyen en el audit para que el comando pueda imprimirlos.
+    _key_cols = ['Fecha', 'Delito', 'Canton', 'Provincia']
+    _null_entries = []
+    for col in _key_cols:
         if col in df.columns:
-            df = df.dropna(subset=[col])
-            df = df[df[col].astype(str).str.strip().ne('')]
+            n_null = int(df[col].isna().sum())
+            _null_entries.append({'tipo': 'nulos', 'col': col, 'nulos': n_null,
+                                  'pct': round(n_null / initial * 100, 1) if initial else 0,
+                                  'present': True})
+        else:
+            _null_entries.append({'tipo': 'nulos', 'col': col, 'nulos': None, 'pct': None, 'present': False})
+    # Agregar listado de columnas disponibles para detectar alias no resueltos
+    _null_entries.append({'tipo': 'columnas', 'nombres': list(df.columns)})
+    audit.extend(_null_entries)
 
-    # Uppercase categorical fields for consistency
+    # ── 3. Parsear y validar fechas ──────────────────────────────────────────
+    _before = len(df)
+    if 'Fecha' in df.columns:
+        df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=False, errors='coerce')
+        df = df.dropna(subset=['Fecha'])
+    _after = len(df)
+    audit.append(_step(
+        rule='Fecha inválida o vacía',
+        justification='Sin fecha no es posible construir la serie temporal mensual.',
+        classification='Obligatorio',
+        before=_before, after=_after, initial=initial,
+    ))
+
+    # ── 4. Eliminar registros sin tipo de delito ─────────────────────────────
+    _before = len(df)
+    if 'Delito' in df.columns:
+        df = df.dropna(subset=['Delito'])
+        df = df[df['Delito'].astype(str).str.strip().ne('')]
+    _after = len(df)
+    audit.append(_step(
+        rule='Delito vacío',
+        justification='El tipo de delito es la clave de agrupación de la serie temporal.',
+        classification='Obligatorio',
+        before=_before, after=_after, initial=initial,
+    ))
+
+    # ── 5. Eliminar registros sin cantón ─────────────────────────────────────
+    _before = len(df)
+    if 'Canton' in df.columns:
+        df = df.dropna(subset=['Canton'])
+        df = df[df['Canton'].astype(str).str.strip().ne('')]
+    _after = len(df)
+    audit.append(_step(
+        rule='Canton vacío',
+        justification='El cantón es la unidad geográfica de los pronósticos.',
+        classification='Obligatorio',
+        before=_before, after=_after, initial=initial,
+    ))
+
+    # ── 6. Normalizar mayúsculas en campos categóricos ───────────────────────
     for col in ['Delito', 'SubDelito', 'Canton', 'Provincia', 'Distrito',
                 'Sexo', 'Victima', 'SubVictima', 'Edad', 'Nacionalidad']:
         if col in df.columns:
             df[col] = df[col].astype(str).str.upper().str.strip()
             df[col] = df[col].replace({'NAN': np.nan})
 
-    # Filter only Alajuela province if column exists
+    # ── 7. Filtrar solo provincia de Alajuela ────────────────────────────────
+    # Estrategia en dos capas:
+    #   a) Mantener registros donde Provincia contiene 'ALAJUELA'
+    #   b) Mantener también registros donde Provincia está vacía PERO el
+    #      Canton pertenece a la lista canónica de cantones de Alajuela.
+    #      Esto evita descartar registros de Alajuela con error de ingreso
+    #      en el campo Provincia.
+    _before = len(df)
     if 'Provincia' in df.columns:
-        df = df[df['Provincia'].fillna('').str.contains('ALAJUELA', na=False)]
+        mask_provincia = df['Provincia'].fillna('').str.contains('ALAJUELA', na=False)
+        if 'Canton' in df.columns:
+            mask_canton_fallback = (
+                df['Provincia'].isna()
+                & df['Canton'].fillna('').isin(CANTONES_ALAJUELA)
+            )
+            df = df[mask_provincia | mask_canton_fallback]
+        else:
+            df = df[mask_provincia]
+    _after = len(df)
+    audit.append(_step(
+        rule='Provincia distinta de Alajuela (o vacía sin cantón reconocible)',
+        justification=(
+            'El sistema está diseñado para la provincia de Alajuela. '
+            'Registros de otras provincias no aportan a los pronósticos. '
+            'Registros con Provincia vacía se conservan si el Cantón pertenece a Alajuela.'
+        ),
+        classification='Obligatorio',
+        before=_before, after=_after, initial=initial,
+    ))
 
-    logger.info(f"Clean dataset shape: {df.shape}")
-    return df.reset_index(drop=True)
+    final = len(df)
+    logger.info(
+        f"[Auditoría] Dataset limpio: {final:,} registros "
+        f"({final / initial * 100:.1f}% retenidos de {initial:,})"
+    )
+
+    return df.reset_index(drop=True), audit
+
+
+def _step(rule: str, justification: str, classification: str,
+          before: int, after: int, initial: int) -> dict:
+    """Build one audit step dict."""
+    dropped = before - after
+    pct_of_step = dropped / before * 100 if before else 0
+    pct_of_total = dropped / initial * 100 if initial else 0
+    logger.info(
+        f"  [{'OK' if dropped == 0 else '–'}] {rule}: "
+        f"{before:,} → {after:,}  (eliminados: {dropped:,} / {pct_of_total:.1f}% del total)"
+    )
+    return {
+        'rule': rule,
+        'justification': justification,
+        'classification': classification,
+        'before': before,
+        'after': after,
+        'dropped': dropped,
+        'pct_step': round(pct_of_step, 1),
+        'pct_total': round(pct_of_total, 1),
+    }
 
 
 def build_monthly_series(df: pd.DataFrame) -> pd.DataFrame:

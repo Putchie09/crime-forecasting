@@ -202,8 +202,8 @@ class DataServiceTests(TestCase):
             'Canton': ['ALAJUELA', 'ALAJUELA'],
             'Provincia': ['ALAJUELA', 'ALAJUELA'],
         })
-        result = clean_dataset(df)
-        self.assertEqual(len(result), 1)
+        result_df, _ = clean_dataset(df)
+        self.assertEqual(len(result_df), 1)
 
     def test_build_monthly_series_aggregation(self):
         """Monthly series should aggregate counts correctly."""
