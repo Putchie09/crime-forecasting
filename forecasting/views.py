@@ -147,9 +147,13 @@ class ForecastView(View):
             context['js_historical_labels'] = json.dumps(results['historical_labels'])
             context['js_historical_values'] = json.dumps(results['historical_values'])
             context['js_forecast_labels'] = json.dumps(results['forecast_labels'])
-            context['js_best_fitted'] = json.dumps(results['best_fitted'])
-            context['js_best_forecast'] = json.dumps(results['best_forecast'])
-            context['js_methods_data'] = json.dumps(results['methods_chart_data'])
+            if results.get('is_aggregated_forecast'):
+                context['js_bottom_up_forecast'] = json.dumps(results['bottom_up_forecast'])
+            else:
+                context['js_best_fitted'] = json.dumps(results['best_fitted'])
+                context['js_best_forecast'] = json.dumps(results['best_forecast'])
+                context['js_best_forecast_raw'] = json.dumps(results['best_forecast_raw'])
+                context['js_methods_data'] = json.dumps(results['methods_chart_data'])
             if results.get('composition_data'):
                 context['js_composition_data'] = json.dumps(results['composition_data'])
 

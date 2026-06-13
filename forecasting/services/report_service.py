@@ -7,6 +7,11 @@ Produces a multi-page PDF report including:
   - Embedded matplotlib charts (historical series + forecast, model MAE comparison)
   - Model comparison table with visual highlighting
   - Data-driven conclusions derived from actual results
+
+Supports two report modes:
+  - Standard: single crime type, four models compared, best selected by MAE.
+  - Bottom-Up (is_aggregated_forecast=True): all crime types modelled individually
+    then aggregated; shows per-type breakdown instead of model comparison.
 """
 
 import io
@@ -64,6 +69,45 @@ _MONTH_SHORT = {
 }
 
 
+# ── Bottom-Up context normalisation ──────────────────────────────────────────
+def _normalize_bottom_up_for_pdf(ctx: dict) -> dict:
+    """
+    The Bottom-Up result dict omits keys that the standard PDF sections expect
+    (best_method, best_mae, best_accuracy, best_forecast, best_fitted, series …).
+    This function adds them with semantically correct substitutes so all sections
+    can render without crashing.  A shallow copy is returned; the original is
+    not mutated.
+    """
+    out = dict(ctx)
+
+    # Reconstruct 'series' list (dicts with year/month) from historical_labels
+    if 'series' not in out:
+        hist_labels = out.get('historical_labels', [])
+        hist_values = out.get('historical_values', [])
+        out['series'] = [
+            {
+                'year':  int(lbl[:4]),
+                'month': int(lbl[5:7]),
+                'total_delitos': val,
+                'label': lbl,
+            }
+            for lbl, val in zip(hist_labels, hist_values)
+        ]
+
+    # Synthetic model fields
+    out.setdefault('best_method',     'Pronóstico Bottom-Up')
+    out.setdefault('best_method_key', 'bottom_up')
+    out.setdefault('best_mae',        None)         # N/A for Bottom-Up
+    out.setdefault('best_accuracy',   None)         # N/A for Bottom-Up
+    out.setdefault('best_forecast',   out.get('bottom_up_forecast', []))
+    out.setdefault('best_forecast_raw', out.get('bottom_up_forecast', []))
+    out.setdefault('best_fitted',     [])           # no single fitted line
+    out.setdefault('metrics_comparison', [])        # no per-model comparison
+    out.setdefault('best_seasonal_list', [])
+
+    return out
+
+
 # ── Paragraph style factory ───────────────────────────────────────────────────
 def _styles() -> dict:
     base = getSampleStyleSheet()
@@ -117,6 +161,7 @@ def _chart_series_forecast(ctx: dict):
     """
     Line chart: full historical series + model fit + forecast.
     Returns PNG bytes or None if matplotlib is unavailable or data is missing.
+    For Bottom-Up mode the fitted line is omitted (best_fitted is empty).
     """
     if not _HAS_MPL:
         return None
@@ -124,7 +169,7 @@ def _chart_series_forecast(ctx: dict):
     hist_labels  = ctx.get('historical_labels', [])
     hist_values  = ctx.get('historical_values', [])
     fore_labels  = ctx.get('forecast_labels', [])
-    fore_values  = ctx.get('best_forecast', [])
+    fore_values  = ctx.get('best_forecast_raw', ctx.get('best_forecast', []))
     fitted       = ctx.get('best_fitted', [])
 
     if not hist_values or not fore_values:
@@ -140,7 +185,7 @@ def _chart_series_forecast(ctx: dict):
     ax.plot(range(n), hist_values, color='#1B263B', linewidth=1.6,
             label='Serie histórica', zorder=3)
 
-    # Model fit (dashed)
+    # Model fit (dashed) — skipped for Bottom-Up (fitted=[])
     if fitted and len(fitted) == n:
         ax.plot(range(n), fitted, color='#2563EB', linewidth=0.85,
                 linestyle='--', alpha=0.65, label='Ajuste del modelo', zorder=2)
@@ -149,8 +194,11 @@ def _chart_series_forecast(ctx: dict):
     x_fore = list(range(n - 1, n + len(fore_values)))
     y_fore = [hist_values[-1]] + list(fore_values)
     ax.fill_between(x_fore, y_fore, alpha=0.12, color='#F97316')
+
+    forecast_label = ('Pronóstico Bottom-Up' if ctx.get('is_aggregated_forecast')
+                      else 'Pronóstico')
     ax.plot(x_fore, y_fore, color='#F97316', linewidth=2.0,
-            label='Pronóstico', marker='o', markersize=3.5, zorder=4)
+            label=forecast_label, marker='o', markersize=3.5, zorder=4)
 
     # Vertical divider between historical and forecast
     ax.axvline(x=n - 1, color='#CBD5E1', linestyle='--', linewidth=0.8)
@@ -166,7 +214,6 @@ def _chart_series_forecast(ctx: dict):
             mo = int(lbl[5:7])
         except (ValueError, IndexError):
             continue
-        # Always show January; also show July when series is short
         if mo == 1 or (len(all_labels) < 20 and mo == 7):
             xt.append(i)
             xl.append(lbl[:4] if mo == 1 else _MONTH_SHORT.get(mo, '') + ' ' + lbl[:4])
@@ -186,6 +233,7 @@ def _chart_mae_comparison(metrics: list):
     """
     Horizontal bar chart comparing MAE across all models.
     Best model highlighted in orange; others in light blue-gray.
+    Returns None if metrics is empty (e.g. Bottom-Up mode).
     """
     if not _HAS_MPL or not metrics:
         return None
@@ -233,6 +281,8 @@ def _draw_cover(canvas, _doc, ctx: dict):
     canvas.saveState()
     w, h = PAGE_W, PAGE_H
 
+    is_agg = ctx.get('is_aggregated_forecast', False)
+
     # ── Top navy header bar ───────────────────────────────────────────────────
     BAR_H = 2.8 * cm
     canvas.setFillColor(C_NAVY)
@@ -256,8 +306,8 @@ def _draw_cover(canvas, _doc, ctx: dict):
     canvas.drawString(2.0 * cm, h - 4.2 * cm, 'REPORTE DE PRONÓSTICO')
 
     # ── Canton name (large) ───────────────────────────────────────────────────
-    canton  = ctx.get('canton', '').title()
-    delito  = ctx.get('delito', '').title()
+    canton   = ctx.get('canton', '').title()
+    delito   = ctx.get('delito', '').title()
     n_months = ctx.get('n_months', '')
 
     canvas.setFillColor(C_NAVY)
@@ -275,19 +325,21 @@ def _draw_cover(canvas, _doc, ctx: dict):
     canvas.setFont('Helvetica', 14)
     canvas.drawString(2.0 * cm, h - 7.1 * cm, delito)
 
-    # ── Info grid (4 cells, white with border) ────────────────────────────────
+    # ── Info grid ────────────────────────────────────────────────────────────
     hist_values  = ctx.get('historical_values', [])
     series       = ctx.get('series', [])
-    best_method  = ctx.get('best_method', '—')
-    best_accuracy = ctx.get('best_accuracy', 0)
     n_periods    = len(hist_values)
     total_events = sum(hist_values)
 
-    # Use short year range to avoid overflow in narrow cells
+    # Period string derived from series list or historical_labels
     period_str = '—'
     if series:
         s0, s1 = series[0], series[-1]
         period_str = f"{s0['year']}–{s1['year']}"
+    else:
+        lbls = ctx.get('historical_labels', [])
+        if lbls:
+            period_str = f"{lbls[0][:4]}–{lbls[-1][:4]}"
 
     cards = [
         ('Período',   period_str),
@@ -308,11 +360,9 @@ def _draw_cover(canvas, _doc, ctx: dict):
         canvas.setFillColor(C_BG)
         canvas.setLineWidth(0.5)
         canvas.rect(x, grid_y, cell_w - 3 * mm, cell_h, fill=1, stroke=1)
-        # Value
         canvas.setFillColor(C_NAVY)
         canvas.setFont('Helvetica-Bold', 14)
         canvas.drawString(x + pad, grid_y + cell_h - 0.85 * cm, val)
-        # Label
         canvas.setFillColor(C_GRAY)
         canvas.setFont('Helvetica', 8)
         canvas.drawString(x + pad, grid_y + pad, lbl)
@@ -326,13 +376,23 @@ def _draw_cover(canvas, _doc, ctx: dict):
     # Orange left accent
     canvas.setFillColor(C_ORANGE)
     canvas.rect(2.0 * cm, model_y, 3 * mm, 1.2 * cm, fill=1, stroke=0)
+
+    if is_agg:
+        label_top  = 'METODOLOGÍA'
+        n_types    = ctx.get('n_crime_types', '?')
+        label_main = f'Pronóstico Bottom-Up   ·   {n_types} tipos de delito modelados individualmente'
+    else:
+        best_method   = ctx.get('best_method', '—')
+        best_accuracy = ctx.get('best_accuracy', 0) or 0
+        label_top  = 'MODELO RECOMENDADO'
+        label_main = f'{best_method}   ·   Precisión: {best_accuracy:.1f}%'
+
     canvas.setFillColor(C_GRAY)
     canvas.setFont('Helvetica', 7.5)
-    canvas.drawString(2.0 * cm + 6 * mm, model_y + 0.82 * cm, 'MODELO RECOMENDADO')
+    canvas.drawString(2.0 * cm + 6 * mm, model_y + 0.82 * cm, label_top)
     canvas.setFillColor(C_NAVY)
     canvas.setFont('Helvetica-Bold', 9.5)
-    canvas.drawString(2.0 * cm + 6 * mm, model_y + 0.25 * cm,
-                      f'{best_method}   ·   Precisión: {best_accuracy:.1f}%')
+    canvas.drawString(2.0 * cm + 6 * mm, model_y + 0.25 * cm, label_main)
 
     # ── Bottom divider + institution ──────────────────────────────────────────
     canvas.setStrokeColor(C_BORDER)
@@ -416,11 +476,12 @@ def _section_executive_summary(ctx: dict, S: dict) -> list:
     """
     elems = _section_heading('Resumen ejecutivo', S, C_ORANGE)
 
+    is_agg       = ctx.get('is_aggregated_forecast', False)
     hist_values  = ctx.get('historical_values', [])
-    fore_values  = ctx.get('best_forecast', [])
+    fore_values  = ctx.get('bottom_up_forecast', []) if is_agg else ctx.get('best_forecast', [])
     best_method  = ctx.get('best_method', '—')
-    best_mae     = ctx.get('best_mae', 0)
-    best_acc     = ctx.get('best_accuracy', 0)
+    best_mae     = ctx.get('best_mae')     # None for Bottom-Up
+    best_acc     = ctx.get('best_accuracy')  # None for Bottom-Up
     series       = ctx.get('series', [])
 
     # Derived statistics
@@ -437,13 +498,20 @@ def _section_executive_summary(ctx: dict, S: dict) -> list:
         s0, s1 = series[0], series[-1]
         period_str = (f"{_MONTH_ES.get(s0['month'], '')} {s0['year']} – "
                       f"{_MONTH_ES.get(s1['month'], '')} {s1['year']}")
+    else:
+        lbls = ctx.get('historical_labels', [])
+        if lbls:
+            period_str = f"{lbls[0][:4]} – {lbls[-1][:4]}"
 
-    # ── KPI card grid (4 cards in one table row) ──────────────────────────────
-    # Short period string to avoid overflow in narrow cells (e.g. "2019–2023")
+    # KPI grid
     period_kpi = '—'
     if series:
         s0, s1 = series[0], series[-1]
         period_kpi = f"{s0['year']}–{s1['year']}"
+    else:
+        lbls = ctx.get('historical_labels', [])
+        if lbls:
+            period_kpi = f"{lbls[0][:4]}–{lbls[-1][:4]}"
 
     kpi_val_style = [
         ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
@@ -454,14 +522,12 @@ def _section_executive_summary(ctx: dict, S: dict) -> list:
         ('RIGHTPADDING', (0, 0), (-1, -1), 4),
         ('BACKGROUND',   (0, 0), (-1, -1), C_BG),
         ('GRID',         (0, 0), (-1, -1), 0.5, C_BORDER),
-        # Top accent bars (different colour per card)
         ('LINEABOVE',    (0, 0), (0, 0), 3, C_ORANGE),
         ('LINEABOVE',    (1, 0), (1, 0), 3, C_NAVY),
         ('LINEABOVE',    (2, 0), (2, 0), 3, C_BLUE),
         ('LINEABOVE',    (3, 0), (3, 0), 3, C_GREEN),
     ]
 
-    # Smaller font (16pt) so values always fit within the cell width
     kpi_val_sm = ParagraphStyle(
         'rpKPIsm', parent=S['kpi_val'], fontSize=16, leading=20,
     )
@@ -481,43 +547,58 @@ def _section_executive_summary(ctx: dict, S: dict) -> list:
         _kpi(f'{total_events:,}',              'Eventos registrados'),
         _kpi(f'{trend_icon} {abs(pct_change):.1f}%', 'Variación proyectada'),
     ]]
-    # No fixed rowHeights — let ReportLab compute height from content
     cards_table = Table(cards_data, colWidths=[CONTENT_W / 4] * 4)
     cards_table.setStyle(TableStyle(kpi_val_style))
     elems.append(cards_table)
     elems.append(Spacer(1, 10))
 
-    # ── Narrative (data-driven, no filler phrases) ────────────────────────────
-    canton  = ctx.get('canton', '').title()
-    delito  = ctx.get('delito', '').title()
+    # Narrative
+    canton   = ctx.get('canton', '').title()
+    delito   = ctx.get('delito', '').title()
     n_months = ctx.get('n_months', '—')
 
-    # Identify historical high and low month
     peak_idx   = hist_values.index(max(hist_values)) if hist_values else 0
     peak_label = ctx.get('historical_labels', ['—'])[peak_idx] if hist_values else '—'
 
     direction_word = ('un incremento' if pct_change > 5 else
                       'una reducción' if pct_change < -5 else 'un comportamiento estable')
 
-    summary_text = (
-        f"El análisis cubre <b>{n_periods} meses</b> de registros de <i>{delito.lower()}</i> "
-        f"en el cantón de {canton} ({period_str}), con un total de "
-        f"<b>{total_events:,} eventos registrados</b>. "
-        f"El modelo de mejor desempeño fue <b>{best_method}</b>, "
-        f"con una DMA de {best_mae:.2f} y una precisión del {best_acc:.1f}%. "
-        f"Para el horizonte de pronóstico de {n_months} meses, "
-        f"el modelo proyecta {direction_word} "
-        f"del <b>{abs(pct_change):.1f}%</b> respecto al promedio reciente "
-        f"({recent_avg:.1f} eventos/mes). "
-        f"El período de mayor incidencia registrado fue {peak_label} "
-        f"con {max(hist_values) if hist_values else 0:,} eventos."
-    )
+    if is_agg:
+        n_types = ctx.get('n_crime_types', '?')
+        summary_text = (
+            f"El análisis cubre <b>{n_periods} meses</b> de registros históricos "
+            f"en el cantón de {canton} ({period_str}), con un total de "
+            f"<b>{total_events:,} eventos registrados</b>. "
+            f"Se aplicó el método <b>Bottom-Up</b>: {n_types} tipos de delito fueron "
+            f"modelados individualmente con el modelo más adecuado según su frecuencia "
+            f"histórica, y los pronósticos se sumaron para obtener el total del cantón. "
+            f"Para el horizonte de {n_months} meses, el sistema proyecta {direction_word} "
+            f"del <b>{abs(pct_change):.1f}%</b> respecto al promedio reciente "
+            f"({recent_avg:.1f} eventos/mes). "
+            f"El período de mayor incidencia registrado fue {peak_label} "
+            f"con {max(hist_values) if hist_values else 0:,} eventos."
+        )
+    else:
+        summary_text = (
+            f"El análisis cubre <b>{n_periods} meses</b> de registros de <i>{delito.lower()}</i> "
+            f"en el cantón de {canton} ({period_str}), con un total de "
+            f"<b>{total_events:,} eventos registrados</b>. "
+            f"El modelo de mejor desempeño fue <b>{best_method}</b>, "
+            f"con una DMA de {best_mae:.2f} y una precisión del {best_acc:.1f}%. "
+            f"Para el horizonte de pronóstico de {n_months} meses, "
+            f"el modelo proyecta {direction_word} "
+            f"del <b>{abs(pct_change):.1f}%</b> respecto al promedio reciente "
+            f"({recent_avg:.1f} eventos/mes). "
+            f"El período de mayor incidencia registrado fue {peak_label} "
+            f"con {max(hist_values) if hist_values else 0:,} eventos."
+        )
     elems.append(Paragraph(summary_text, S['body']))
     return elems
 
 
 def _section_parameters(ctx: dict, S: dict) -> list:
-    """Compact parameters table — only the information the reader needs to reproduce the analysis."""
+    """Compact parameters table."""
+    is_agg   = ctx.get('is_aggregated_forecast', False)
     canton   = ctx.get('canton', '—').title()
     delito   = ctx.get('delito', '—').title()
     n_months = ctx.get('n_months', '—')
@@ -529,8 +610,12 @@ def _section_parameters(ctx: dict, S: dict) -> list:
         s0, s1 = series[0], series[-1]
         date_from = f"{_MONTH_ES.get(s0['month'], '')} {s0['year']}"
         date_to   = f"{_MONTH_ES.get(s1['month'], '')} {s1['year']}"
+    else:
+        lbls = ctx.get('historical_labels', [])
+        if lbls:
+            date_from = f"{_MONTH_ES.get(int(lbls[0][5:7]), '')} {lbls[0][:4]}"
+            date_to   = f"{_MONTH_ES.get(int(lbls[-1][5:7]), '')} {lbls[-1][:4]}"
 
-    # Use Paragraph in every cell so long values wrap instead of overflow
     def _cell(text, bold=False):
         style = ParagraphStyle(
             'pc', parent=S['body'],
@@ -545,13 +630,21 @@ def _section_parameters(ctx: dict, S: dict) -> list:
             fontSize=9, textColor=C_GRAY, leading=13,
         ))
 
+    if is_agg:
+        n_types     = ctx.get('n_crime_types', '?')
+        method_lbl  = 'Metodología'
+        method_val  = f'Bottom-Up ({n_types} tipos de delito)'
+    else:
+        method_lbl  = 'Modelo óptimo'
+        method_val  = ctx.get('best_method', '—')
+
     rows = [
-        [_label('Cantón'),          _cell(canton),
-         _label('Horizonte'),       _cell(f'{n_months} meses')],
-        [_label('Tipo de delito'),  _cell(delito),
-         _label('Inicio'),          _cell(date_from)],
-        [_label('Modelo óptimo'),   _cell(ctx.get('best_method', '—')),
-         _label('Fin'),             _cell(date_to)],
+        [_label('Cantón'),         _cell(canton),
+         _label('Horizonte'),      _cell(f'{n_months} meses')],
+        [_label('Tipo de delito'), _cell(delito),
+         _label('Inicio'),         _cell(date_from)],
+        [_label(method_lbl),       _cell(method_val),
+         _label('Fin'),            _cell(date_to)],
     ]
 
     col_w = [2.8 * cm, CONTENT_W / 2 - 2.8 * cm, 2.8 * cm, CONTENT_W / 2 - 2.8 * cm]
@@ -568,13 +661,11 @@ def _section_parameters(ctx: dict, S: dict) -> list:
 
 
 def _section_historical_forecast(ctx: dict, S: dict, chart_bytes) -> list:
-    """Chart + forecast table. The chart is the centrepiece — table is secondary."""
+    """Chart + forecast table."""
     hist_values = ctx.get('historical_values', [])
-    series      = ctx.get('series', [])
 
-    # Brief contextual note (data-derived)
     note_para = None
-    if hist_values and series:
+    if hist_values:
         avg_monthly = sum(hist_values) / len(hist_values)
         note_para = Paragraph(
             f"Promedio mensual histórico: <b>{avg_monthly:.1f}</b> eventos · "
@@ -582,37 +673,46 @@ def _section_historical_forecast(ctx: dict, S: dict, chart_bytes) -> list:
             S['body_sm'],
         )
 
-    # Chart block — keep heading, note and chart together
-    chart_block = _section_heading('Serie histórica y pronóstico', S)
+    is_agg = ctx.get('is_aggregated_forecast', False)
+    chart_title = ('Serie histórica total y pronóstico Bottom-Up'
+                   if is_agg else 'Serie histórica y pronóstico')
+    chart_block = _section_heading(chart_title, S)
     if note_para:
         chart_block.append(note_para)
     if chart_bytes:
         chart_h = CONTENT_W * (3.9 / 12)
         chart_block.append(_make_image(chart_bytes, CONTENT_W, chart_h))
-        chart_block.append(Paragraph(
-            'La línea naranja representa el pronóstico generado por el modelo seleccionado. '
-            'La línea azul punteada muestra el ajuste del modelo al período histórico.',
-            S['caption'],
-        ))
+        if is_agg:
+            caption = (
+                'La línea naranja representa el pronóstico Bottom-Up (suma de los '
+                'pronósticos individuales por tipo de delito).'
+            )
+        else:
+            caption = (
+                'La línea naranja representa el pronóstico generado por el modelo seleccionado. '
+                'La línea azul punteada muestra el ajuste del modelo al período histórico.'
+            )
+        chart_block.append(Paragraph(caption, S['caption']))
     else:
         chart_block.append(Paragraph('Gráfico no disponible (requiere matplotlib).', S['note']))
 
     elems = [KeepTogether(chart_block), Spacer(1, 6)]
 
-    # Forecast table — keep sub-heading with the table
     forecast_table = ctx.get('forecast_table', [])
     if forecast_table:
-        best_val = max(r['value'] for r in forecast_table)
-        rows = [['Período', 'Mes', 'Año', 'Delitos proyectados']]
+        best_raw = max((r.get('value_raw', r.get('value', 0)) for r in forecast_table), default=0)
+        rows = [['Período', 'Mes', 'Año', 'Proyectado', 'Redondeado']]
         for row in forecast_table:
+            raw_val = row.get('value_raw', row.get('value', ''))
             rows.append([
                 row.get('period', ''),
                 row.get('month_name', ''),
                 str(row.get('year', '')),
+                f"{raw_val:.2f}" if isinstance(raw_val, float) else str(raw_val),
                 str(row.get('value', '')),
             ])
 
-        col_w = [3.0 * cm, 5.5 * cm, 2.5 * cm, 5.6 * cm]
+        col_w = [2.8 * cm, 4.8 * cm, 2.2 * cm, 3.5 * cm, 3.3 * cm]
         ft = Table(rows, colWidths=col_w, repeatRows=1)
         style = [
             ('BACKGROUND',     (0, 0), (-1, 0), C_NAVY),
@@ -626,11 +726,15 @@ def _section_historical_forecast(ctx: dict, S: dict, chart_bytes) -> list:
             ('GRID',           (0, 0), (-1, -1), 0.5, C_BORDER),
             ('TOPPADDING',     (0, 0), (-1, -1), 7),
             ('BOTTOMPADDING',  (0, 0), (-1, -1), 7),
+            # "Proyectado" column (index 3) — bold navy
             ('FONTNAME',       (3, 1), (3, -1), 'Helvetica-Bold'),
             ('TEXTCOLOR',      (3, 1), (3, -1), C_NAVY),
+            # "Redondeado" column (index 4) — muted
+            ('TEXTCOLOR',      (4, 1), (4, -1), C_GRAY),
         ]
         for i, row in enumerate(forecast_table, start=1):
-            if row.get('value') == best_val:
+            raw_val = row.get('value_raw', row.get('value', 0))
+            if isinstance(raw_val, (int, float)) and raw_val == best_raw:
                 style += [
                     ('BACKGROUND', (3, i), (3, i), HexColor('#FFF7ED')),
                     ('TEXTCOLOR',  (3, i), (3, i), C_ORANGE),
@@ -643,7 +747,7 @@ def _section_historical_forecast(ctx: dict, S: dict, chart_bytes) -> list:
 
 
 def _section_metrics(ctx: dict, S: dict, chart_bytes) -> list:
-    """Model comparison: bar chart + detailed metrics table."""
+    """Model comparison: bar chart + detailed metrics table. Skipped for Bottom-Up."""
     metrics = ctx.get('metrics_comparison', [])
     if not metrics:
         return []
@@ -660,13 +764,11 @@ def _section_metrics(ctx: dict, S: dict, chart_bytes) -> list:
         S['body'],
     )
 
-    # Bar chart
     chart_img = None
     if chart_bytes:
         chart_h = CONTENT_W * (2.4 / 10)
         chart_img = _make_image(chart_bytes, CONTENT_W * 0.9, chart_h)
 
-    # Metrics table
     hdr = ['Modelo', 'DMA (MAE)', 'MSE', 'RMSE', 'Precisión', '']
     rows = [hdr]
     for m in metrics:
@@ -712,6 +814,66 @@ def _section_metrics(ctx: dict, S: dict, chart_bytes) -> list:
     return [KeepTogether(block)]
 
 
+def _section_breakdown(ctx: dict, S: dict) -> list:
+    """Per-crime-type breakdown table — only included for Bottom-Up reports."""
+    breakdown = ctx.get('breakdown', [])
+    if not breakdown:
+        return []
+
+    freq_labels = {'alta': 'Alta', 'media': 'Media', 'baja': 'Baja'}
+
+    intro = Paragraph(
+        f"Desglose de los {len(breakdown)} tipos de delito modelados individualmente, "
+        f"ordenados por contribución al pronóstico total (mayor → menor).",
+        S['body_sm'],
+    )
+
+    hdr = ['Tipo de delito', 'Modelo aplicado', 'Clase', 'DMA', 'Pron. prom./mes', 'Contribución']
+    rows = [hdr]
+    for item in breakdown:
+        rows.append([
+            item.get('crime_type', ''),
+            item.get('model_used', ''),
+            freq_labels.get(item.get('frequency_class', ''), '—'),
+            f"{item.get('dma', 0):.4f}",
+            f"{item.get('forecast_avg', 0):.2f}",
+            f"{item.get('contribution_pct', 0):.1f}%",
+        ])
+
+    col_w = [3.8 * cm, 4.0 * cm, 1.5 * cm, 2.0 * cm, 2.5 * cm, 2.7 * cm]
+    t = Table(rows, colWidths=col_w, repeatRows=1)
+    t.setStyle(TableStyle([
+        ('BACKGROUND',     (0, 0), (-1, 0), C_NAVY),
+        ('TEXTCOLOR',      (0, 0), (-1, 0), white),
+        ('FONTNAME',       (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE',       (0, 0), (-1, 0), 8.5),
+        ('FONTNAME',       (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE',       (0, 1), (-1, -1), 8.5),
+        ('ALIGN',          (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN',          (1, 0), (-1, -1), 'CENTER'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [white, C_BG]),
+        ('GRID',           (0, 0), (-1, -1), 0.5, C_BORDER),
+        ('TOPPADDING',     (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING',  (0, 0), (-1, -1), 6),
+        ('LEFTPADDING',    (0, 0), (0, -1), 6),
+    ]))
+
+    elems = _section_heading('Desglose Bottom-Up por tipo de delito', S) + [intro, t]
+
+    warnings = ctx.get('warnings', [])
+    if warnings:
+        elems.append(Spacer(1, 6))
+        elems.append(Paragraph(
+            'Notas del modelado:',
+            ParagraphStyle('nhead', parent=S['body_sm'],
+                           fontName='Helvetica-Bold', fontSize=8.5),
+        ))
+        for w in warnings[:10]:
+            elems.append(Paragraph(f'• {w}', S['note']))
+
+    return [KeepTogether(elems)]
+
+
 def _section_composition(ctx: dict, S: dict) -> list:
     """Crime type breakdown — only included for 'all crimes' queries."""
     comp = ctx.get('composition_data', [])
@@ -753,17 +915,19 @@ def _section_composition(ctx: dict, S: dict) -> list:
 
 def _section_conclusions(ctx: dict, S: dict) -> list:
     """
-    Data-driven conclusions: trend, seasonality, model rationale, and recommendation.
-    Each paragraph derives from actual results, not template phrases.
+    Data-driven conclusions: trend, methodology rationale, forecast summary, quality.
+    Adapts automatically for Bottom-Up vs. standard single-model reports.
     """
     elems = _section_heading('Conclusiones y hallazgos', S)
 
+    is_agg        = ctx.get('is_aggregated_forecast', False)
     hist_values   = ctx.get('historical_values', [])
-    fore_values   = ctx.get('best_forecast', [])
+    fore_values   = (ctx.get('bottom_up_forecast', []) if is_agg
+                     else ctx.get('best_forecast', []))
     best_method   = ctx.get('best_method', '—')
     best_key      = ctx.get('best_method_key', '')
-    best_mae      = ctx.get('best_mae', 0)
-    best_acc      = ctx.get('best_accuracy', 0)
+    best_mae      = ctx.get('best_mae')
+    best_acc      = ctx.get('best_accuracy')
     canton        = ctx.get('canton', '').title()
     delito        = ctx.get('delito', '').title()
     n_months      = ctx.get('n_months', '—')
@@ -778,7 +942,7 @@ def _section_conclusions(ctx: dict, S: dict) -> list:
     fore_avg   = sum(fore_values) / len(fore_values) if fore_values else 0
     pct_change = (fore_avg - recent_avg) / recent_avg * 100 if recent_avg > 0 else 0
 
-    # ── 1. Tendencia histórica ────────────────────────────────────────────────
+    # ── 1. Historical trend ───────────────────────────────────────────────────
     first_q = hist_values[:max(1, n // 4)]
     last_q  = hist_values[-max(1, n // 4):]
     avg_first = sum(first_q) / len(first_q)
@@ -796,55 +960,84 @@ def _section_conclusions(ctx: dict, S: dict) -> list:
                       "el nivel de incidencia se mantiene relativamente estable.")
     elems.append(Paragraph(trend_text, S['body']))
 
-    # ── 2. Estacionalidad ─────────────────────────────────────────────────────
-    if best_key in ('seasonal_index', 'multiplicative_decomposition'):
-        seasonal_list = ctx.get('best_seasonal_list', [])
-        if seasonal_list:
-            peak_month  = max(seasonal_list, key=lambda x: float(x['value']))
-            trough_month = min(seasonal_list, key=lambda x: float(x['value']))
-            elems.append(Paragraph(
-                f"El análisis detectó un <b>patrón estacional significativo</b>. "
-                f"El mes de mayor incidencia relativa es <b>{peak_month['month_name']}</b> "
-                f"(índice {float(peak_month['value']):.2f}), mientras que "
-                f"{trough_month['month_name']} presenta la menor incidencia "
-                f"(índice {float(trough_month['value']):.2f}). "
-                f"Esto indica que la incidencia en el mes pico es "
-                f"{float(peak_month['value'])/float(trough_month['value']):.1f}× "
-                f"la del mes con menor actividad.",
-                S['body'],
-            ))
-    else:
+    # ── 2. Methodology note ───────────────────────────────────────────────────
+    if is_agg:
+        n_types = ctx.get('n_crime_types', '?')
         elems.append(Paragraph(
-            f"El modelo seleccionado ({best_method}) no modela estacionalidad explícita. "
-            f"Si la serie presenta ciclos mensuales, considere analizar con "
-            f"un período de datos mayor para habilitar los métodos estacionales.",
+            f"Se aplicó el método <b>Bottom-Up</b>: cada uno de los {n_types} tipos de delito "
+            f"fue modelado individualmente con el modelo más adecuado según su frecuencia "
+            f"histórica (baja frecuencia → Tendencia Lineal; frecuencia media → Suavizamiento "
+            f"Exponencial; alta frecuencia → mejor de los 4 modelos por DMA). "
+            f"Los pronósticos individuales se sumaron para obtener el total del cantón. "
+            f"Este enfoque preserva los patrones estacionales específicos de cada tipo de delito "
+            f"y evita que distintos ciclos se cancelen entre sí.",
             S['body'],
         ))
+    else:
+        if best_key in ('seasonal_index', 'multiplicative_decomposition'):
+            seasonal_list = ctx.get('best_seasonal_list', [])
+            if seasonal_list:
+                peak_month   = max(seasonal_list, key=lambda x: float(x['value']))
+                trough_month = min(seasonal_list, key=lambda x: float(x['value']))
+                trough_val   = float(trough_month['value'])
+                if trough_val > 0:
+                    ratio_text = (f"la incidencia en el mes pico es "
+                                  f"{float(peak_month['value']) / trough_val:.1f}× "
+                                  f"la del mes con menor actividad.")
+                else:
+                    ratio_text = (f"el mes {trough_month['month_name']} no registró eventos "
+                                  f"en el período histórico (índice 0.0).")
+                elems.append(Paragraph(
+                    f"El análisis detectó un <b>patrón estacional significativo</b>. "
+                    f"El mes de mayor incidencia relativa es <b>{peak_month['month_name']}</b> "
+                    f"(índice {float(peak_month['value']):.2f}), mientras que "
+                    f"{trough_month['month_name']} presenta la menor incidencia "
+                    f"(índice {trough_val:.2f}). "
+                    + ratio_text,
+                    S['body'],
+                ))
+        else:
+            elems.append(Paragraph(
+                f"El modelo seleccionado ({best_method}) no modela estacionalidad explícita. "
+                f"Si la serie presenta ciclos mensuales, considere analizar con "
+                f"un período de datos mayor para habilitar los métodos estacionales.",
+                S['body'],
+            ))
 
-    # ── 3. Pronóstico ─────────────────────────────────────────────────────────
+    # ── 3. Forecast summary ───────────────────────────────────────────────────
     direction  = ('un incremento' if pct_change > 5 else
                   'una reducción' if pct_change < -5 else 'un nivel estable')
     fore_total = sum(fore_values) if fore_values else 0
     elems.append(Paragraph(
-        f"Para los próximos <b>{n_months} meses</b>, el modelo proyecta {direction} "
-        f"del {abs(pct_change):.1f}% en los casos de {delito.lower()} "
+        f"Para los próximos <b>{n_months} meses</b>, el pronóstico proyecta {direction} "
+        f"del {abs(pct_change):.1f}% en el total de delitos "
         f"en el cantón de {canton} "
         f"({recent_avg:.1f} eventos/mes → {fore_avg:.1f} proyectados). "
         f"El total acumulado proyectado para el período es de <b>{fore_total:,} eventos</b>.",
         S['body'],
     ))
 
-    # ── 4. Calidad del modelo ─────────────────────────────────────────────────
-    quality = ('excelente' if best_acc >= 85 else 'aceptable' if best_acc >= 70 else 'limitada')
-    elems.append(Paragraph(
-        f"La precisión del modelo es <b>{quality}</b> ({best_acc:.1f}%). "
-        f"El error absoluto medio de {best_mae:.2f} eventos/mes indica que las proyecciones "
-        f"tienen una desviación promedio de {best_mae:.1f} eventos respecto a los datos reales "
-        f"en el período de entrenamiento.",
-        S['body'],
-    ))
+    # ── 4. Model quality ──────────────────────────────────────────────────────
+    if is_agg:
+        elems.append(Paragraph(
+            f"La metodología Bottom-Up produce pronósticos individuales para cada tipo de "
+            f"delito; la calidad de ajuste varía por tipo. Consulte el desglose en la tabla "
+            f"anterior para los valores de DMA por tipo de delito.",
+            S['body'],
+        ))
+    else:
+        acc_val = best_acc or 0
+        mae_val = best_mae or 0
+        quality = ('excelente' if acc_val >= 85 else 'aceptable' if acc_val >= 70 else 'limitada')
+        elems.append(Paragraph(
+            f"La precisión del modelo es <b>{quality}</b> ({acc_val:.1f}%). "
+            f"El error absoluto medio de {mae_val:.2f} eventos/mes indica que las proyecciones "
+            f"tienen una desviación promedio de {mae_val:.1f} eventos respecto a los datos reales "
+            f"en el período de entrenamiento.",
+            S['body'],
+        ))
 
-    # ── 5. Interpretación del servicio (si tiene contenido útil) ─────────────
+    # ── 5. Interpretation from service ───────────────────────────────────────
     if interpretation:
         clean = (interpretation
                  .replace('<strong>', '<b>').replace('</strong>', '</b>')
@@ -866,6 +1059,12 @@ def generate_forecast_pdf(context: dict) -> bytes:
     Returns:
         PDF content as bytes.
     """
+    is_agg = context.get('is_aggregated_forecast', False)
+
+    # Normalise Bottom-Up context so all sections receive the keys they expect
+    if is_agg:
+        context = _normalize_bottom_up_for_pdf(context)
+
     # ── Pre-render matplotlib charts ──────────────────────────────────────────
     chart_series = None
     chart_mae    = None
@@ -901,7 +1100,6 @@ def generate_forecast_pdf(context: dict) -> bytes:
     story = []
 
     # Page 1 is the cover — drawn entirely via canvas callback.
-    # The PageBreak here fills "page 1" so the flow starts on page 2.
     story.append(PageBreak())
 
     # Executive summary
@@ -915,10 +1113,14 @@ def generate_forecast_pdf(context: dict) -> bytes:
     # Historical + forecast chart and table
     story.extend(_section_historical_forecast(context, S, chart_series))
 
-    # Model comparison
-    story.extend(_section_metrics(context, S, chart_mae))
+    if is_agg:
+        # Bottom-Up: per-type breakdown replaces model comparison
+        story.extend(_section_breakdown(context, S))
+    else:
+        # Standard: four-model comparison
+        story.extend(_section_metrics(context, S, chart_mae))
 
-    # Crime composition (only for all-delitos queries)
+    # Crime composition (for both all-crimes modes)
     story.extend(_section_composition(context, S))
 
     # Conclusions
