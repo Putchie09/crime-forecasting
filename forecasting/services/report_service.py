@@ -579,12 +579,14 @@ def _section_executive_summary(ctx: dict, S: dict) -> list:
             f"con {max(hist_values) if hist_values else 0:,} eventos."
         )
     else:
+        mae_str = f"{best_mae:.2f}" if best_mae is not None else "N/D"
+        acc_str = f"{best_acc:.1f}%" if best_acc is not None else "N/D"
         summary_text = (
             f"El análisis cubre <b>{n_periods} meses</b> de registros de <i>{delito.lower()}</i> "
             f"en el cantón de {canton} ({period_str}), con un total de "
             f"<b>{total_events:,} eventos registrados</b>. "
             f"El modelo de mejor desempeño fue <b>{best_method}</b>, "
-            f"con una DMA de {best_mae:.2f} y una precisión del {best_acc:.1f}%. "
+            f"con una DMA de {mae_str} y una precisión del {acc_str}. "
             f"Para el horizonte de pronóstico de {n_months} meses, "
             f"el modelo proyecta {direction_word} "
             f"del <b>{abs(pct_change):.1f}%</b> respecto al promedio reciente "

@@ -22,6 +22,7 @@ from forecasting.forecasting_methods import (
 logger = logging.getLogger(__name__)
 
 ALL_DELITOS_TOKEN = '__ALL__'
+ALL_CANTONS_TOKEN = '__ALL_CANTONS__'
 
 MONTH_NAMES_ES = {
     1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr',
@@ -58,9 +59,13 @@ def _get_all_delitos_series(canton: str) -> list:
     """
     from django.db.models import Sum
 
+    qs = (
+        MonthlySeries.objects.exclude(canton='DESCONOCIDO')
+        if canton.upper() == ALL_CANTONS_TOKEN
+        else MonthlySeries.objects.filter(canton=canton.upper())
+    )
     rows = list(
-        MonthlySeries.objects.filter(canton=canton.upper())
-        .values('year', 'month')
+        qs.values('year', 'month')
         .annotate(total=Sum('total_delitos'))
         .order_by('year', 'month')
     )
@@ -96,9 +101,13 @@ def _compute_delito_composition(canton: str) -> list:
     """Return list of {delito, total, pct} dicts for the canton, sorted by total desc."""
     from django.db.models import Sum
 
+    qs = (
+        MonthlySeries.objects.exclude(canton='DESCONOCIDO')
+        if canton.upper() == ALL_CANTONS_TOKEN
+        else MonthlySeries.objects.filter(canton=canton.upper())
+    )
     rows = list(
-        MonthlySeries.objects.filter(canton=canton.upper())
-        .values('delito')
+        qs.values('delito')
         .annotate(total=Sum('total_delitos'))
         .order_by('-total')
     )
@@ -129,24 +138,39 @@ def get_time_series(canton: str, delito: str) -> list:
     if delito.upper() == ALL_DELITOS_TOKEN:
         return _get_all_delitos_series(canton)
 
-    records = list(
-        MonthlySeries.objects.filter(
-            canton=canton.upper(),
-            delito=delito.upper(),
-        ).order_by('year', 'month')
-    )
+    from django.db.models import Sum
 
-    if not records:
-        return []
-
-    data_map = {(rec.year, rec.month): rec.total_delitos for rec in records}
-    start_year, start_month = records[0].year, records[0].month
+    if canton.upper() == ALL_CANTONS_TOKEN:
+        agg_rows = list(
+            MonthlySeries.objects.exclude(canton='DESCONOCIDO')
+            .filter(delito=delito.upper())
+            .values('year', 'month')
+            .annotate(total=Sum('total_delitos'))
+            .order_by('year', 'month')
+        )
+        if not agg_rows:
+            return []
+        data_map = {(r['year'], r['month']): r['total'] for r in agg_rows}
+        start_year, start_month = agg_rows[0]['year'], agg_rows[0]['month']
+        fallback_end = (agg_rows[-1]['year'], agg_rows[-1]['month'])
+    else:
+        records = list(
+            MonthlySeries.objects.filter(
+                canton=canton.upper(),
+                delito=delito.upper(),
+            ).order_by('year', 'month')
+        )
+        if not records:
+            return []
+        data_map = {(rec.year, rec.month): rec.total_delitos for rec in records}
+        start_year, start_month = records[0].year, records[0].month
+        fallback_end = (records[-1].year, records[-1].month)
 
     global_range = get_global_series_range()
     if global_range:
         end_year, end_month = global_range['max_year'], global_range['max_month']
     else:
-        end_year, end_month = records[-1].year, records[-1].month
+        end_year, end_month = fallback_end
 
     series = []
     yr, mo = start_year, start_month
@@ -168,7 +192,14 @@ def get_time_series(canton: str, delito: str) -> list:
 # ── Bottom-Up helpers ─────────────────────────────────────────────────────────
 
 def _get_crime_types_for_canton(canton: str) -> list:
-    """Return sorted list of distinct crime type strings for the canton."""
+    """Return sorted list of distinct crime type strings for the canton (or all province)."""
+    if canton.upper() == ALL_CANTONS_TOKEN:
+        return list(
+            MonthlySeries.objects.exclude(canton='DESCONOCIDO')
+            .values_list('delito', flat=True)
+            .distinct()
+            .order_by('delito')
+        )
     return list(
         MonthlySeries.objects.filter(canton=canton.upper())
         .values_list('delito', flat=True)
@@ -257,7 +288,7 @@ def _forecast_for_crime_type(
 
 def run_all_crime_types_forecast(canton: str, n_months: int) -> dict:
     """
-    Bottom-Up aggregated forecast for all crime types in a canton.
+    Bottom-Up aggregated forecast for all crime types in a canton (or the full province).
 
     Steps:
       1. Enumerate all crime types with records in the canton.
@@ -266,17 +297,20 @@ def run_all_crime_types_forecast(canton: str, n_months: int) -> dict:
       4. Sum individual forecasts → Bottom-Up total.
       5. Return structured results for the template.
     """
+    is_all_cantons = canton.upper() == ALL_CANTONS_TOKEN
+    display_canton = 'Provincia de Alajuela' if is_all_cantons else canton.title()
+
     crime_types = _get_crime_types_for_canton(canton)
     if not crime_types:
         return {
-            'error': f'No se encontraron datos para el cantón {canton.title()}.',
+            'error': f'No se encontraron datos para {display_canton}.',
             'series': [],
         }
 
     aggregate_series = _get_all_delitos_series(canton)
     if not aggregate_series:
         return {
-            'error': f'No se pudieron obtener datos históricos para {canton.title()}.',
+            'error': f'No se pudieron obtener datos históricos para {display_canton}.',
             'series': [],
         }
 
@@ -381,32 +415,57 @@ def run_all_crime_types_forecast(canton: str, n_months: int) -> dict:
     canton_title = canton.title()
     n_types = len(breakdown)
 
+    # Peak projected month
+    peak_idx = int(np.argmax(bottom_up))
+    peak_label_bu = forecast_labels[peak_idx]
+    peak_month_name = MONTH_NAMES_FULL_ES.get(int(peak_label_bu[5:7]), '')
+    peak_year = peak_label_bu[:4]
+    peak_count = round(float(bottom_up[peak_idx]))
+    top_delito = breakdown[0]['crime_type'] if breakdown else ''
+
+    # Risk level relative to historical mean
+    hist_mean = float(np.mean(historical_values)) if historical_values else 0.0
+    if hist_mean > 0:
+        ratio = forecast_avg_val / hist_mean
+        risk_level = 'Alto' if ratio > 1.20 else ('Bajo' if ratio < 0.80 else 'Medio')
+    else:
+        risk_level = 'Medio'
+
     interpretation = (
-        f"El sistema proyecta aproximadamente <strong>{round(forecast_avg_val)}</strong> "
-        f"delitos mensuales en total para los próximos {n_months} meses en el cantón de "
-        f"{canton_title}, utilizando el método <em>Bottom-Up</em> sobre "
+        f"El sistema proyecta aproximadamente <strong>{round(forecast_avg_val, 1)}</strong> "
+        f"delitos mensuales en total para los próximos {n_months} meses en {display_canton}, "
+        f"utilizando el método <em>Bottom-Up</em> sobre "
         f"<strong>{n_types}</strong> tipos de delito modelados individualmente. "
+        f"Nivel de riesgo proyectado: <strong>{risk_level}</strong>. "
+        f"El mes de mayor incidencia proyectada es <strong>{peak_month_name} {peak_year}</strong> "
+        f"con aproximadamente {peak_count} eventos. "
+        f"El tipo de delito con mayor peso es <em>{top_delito}</em>. "
     )
     if pct_change > 15:
         interpretation += (
             f"Se proyecta un {direction} del {abs_pct}% respecto al promedio reciente. "
-            f"Se recomienda reforzar los operativos de seguridad en {canton_title}."
+            f"Se recomienda reforzar los operativos de seguridad en {canton_title}, "
+            f"prestando especial atención en {peak_month_name} {peak_year} "
+            f"y priorizando acciones sobre '{top_delito}'."
         )
     elif pct_change < -10:
         interpretation += (
             f"Se proyecta una reducción del {abs_pct}% respecto al promedio reciente. "
-            f"Podría indicar efectividad de las medidas preventivas actuales en {canton_title}."
+            f"Podría indicar efectividad de las medidas preventivas actuales en {canton_title}. "
+            f"Se recomienda evaluar qué estrategias aplicadas antes de {peak_month_name} "
+            f"pueden mantenerse o replicarse."
         )
     else:
         interpretation += (
             f"El comportamiento proyectado se mantiene relativamente estable "
             f"(variación de {pct_change:+.1f}% respecto al promedio reciente). "
-            f"Se recomienda continuar con las estrategias de prevención vigentes."
+            f"Se recomienda mantener vigilancia especial en {peak_month_name} {peak_year} "
+            f"({peak_count} eventos proyectados) y continuar con las estrategias de prevención vigentes."
         )
 
     return {
         'success': True,
-        'canton': canton,
+        'canton': display_canton,
         'delito': 'Todos los delitos',
         'is_all_delitos': True,
         'is_aggregated_forecast': True,
@@ -438,9 +497,11 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
     When delito == ALL_DELITOS_TOKEN, delegates to run_all_crime_types_forecast
     which uses a Bottom-Up approach instead of naive aggregation.
     """
-    # 0. Normalize display label
+    # 0. Normalize display labels
     is_all_delitos = delito.upper() == ALL_DELITOS_TOKEN
+    is_all_cantons = canton.upper() == ALL_CANTONS_TOKEN
     display_delito = 'Todos los delitos' if is_all_delitos else delito
+    display_canton = 'Provincia de Alajuela' if is_all_cantons else canton
 
     # Branch: Bottom-Up pipeline for all crime types
     if is_all_delitos:
@@ -561,13 +622,14 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
 
     # 7. Generate automatic interpretation
     interpretation = _generate_interpretation(
-        canton=canton,
+        canton=display_canton,
         delito=display_delito,
         values=values,
         best_result=best_result,
         forecast_values=best_forecast_values,
         n_months=n_months,
         is_all_delitos=False,
+        forecast_labels=forecast_labels,
     )
 
     # 8. Build per-method forecast data for Chart.js
@@ -582,7 +644,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
 
     return {
         'success': True,
-        'canton': canton,
+        'canton': display_canton,
         'delito': display_delito,
         'is_all_delitos': False,
         'is_aggregated_forecast': False,
@@ -628,6 +690,7 @@ def _generate_interpretation(
     forecast_values: list,
     n_months: int,
     is_all_delitos: bool = False,
+    forecast_labels: list | None = None,
 ) -> str:
     """
     Generate an automatic Spanish-language interpretation of the forecast results.
@@ -651,52 +714,81 @@ def _generate_interpretation(
     mae = best_result['mae']
     accuracy = best_result['accuracy']
 
+    # Peak projected month
+    peak_idx = int(np.argmax(forecast_values))
+    peak_count = round(float(forecast_values[peak_idx]))
+    if forecast_labels and peak_idx < len(forecast_labels):
+        peak_lbl = forecast_labels[peak_idx]
+        peak_month_name = MONTH_NAMES_FULL_ES.get(int(peak_lbl[5:7]), '')
+        peak_year = peak_lbl[:4]
+        peak_str = f"{peak_month_name} {peak_year} ({peak_count} casos)"
+    else:
+        peak_str = f"el mes {peak_idx + 1} ({peak_count} casos)"
+
+    # Risk level relative to full historical mean
+    hist_mean = float(np.mean(values)) if values else 0.0
+    if hist_mean > 0:
+        ratio = float(forecast_avg) / hist_mean
+        risk_level = 'Alto' if ratio > 1.20 else ('Bajo' if ratio < 0.80 else 'Medio')
+    else:
+        risk_level = 'Medio'
+
     if is_all_delitos:
         interpretation = (
-            f"El sistema proyecta aproximadamente <strong>{round(forecast_avg)}</strong> delitos mensuales "
+            f"El sistema proyecta aproximadamente <strong>{round(forecast_avg, 1)}</strong> delitos mensuales "
             f"para los próximos {n_months} meses en el cantón de {canton_title}, "
             f"considerando todos los tipos de delito registrados. "
+            f"Nivel de riesgo proyectado: <strong>{risk_level}</strong>. "
+            f"El mes de mayor incidencia proyectada es <strong>{peak_str}</strong>. "
             f"El método con mejor desempeño fue <strong>{method_name}</strong> "
             f"con una DMA de {mae:.2f} y una precisión del {accuracy:.1f}%. "
         )
         if pct_change > 15:
             interpretation += (
                 f"Se proyecta un {direction} del {abs_pct}% respecto al promedio reciente. "
-                f"Se recomienda reforzar los operativos de seguridad en {canton_title}."
+                f"Se recomienda reforzar los operativos de seguridad en {canton_title}, "
+                f"con especial atención en {peak_str}."
             )
         elif pct_change < -10:
             interpretation += (
                 f"Se proyecta una reducción del {abs_pct}% respecto al promedio reciente. "
-                f"Podría indicar efectividad de las medidas preventivas actuales."
+                f"Podría indicar efectividad de las medidas preventivas actuales. "
+                f"Se recomienda evaluar qué estrategias mantener para sostener la tendencia."
             )
         else:
             interpretation += (
                 f"El comportamiento proyectado se mantiene relativamente estable "
                 f"(variación de {pct_change:+.1f}% respecto al promedio reciente). "
-                f"Se recomienda continuar con las estrategias de prevención vigentes."
+                f"Se recomienda mantener vigilancia especial en {peak_str} "
+                f"y continuar con las estrategias de prevención vigentes."
             )
     else:
         delito_title = delito.lower()
         interpretation = (
             f"Se proyecta un {direction} del {abs_pct}% en los casos de {delito_title} "
             f"para los próximos {n_months} meses en el cantón de {canton_title}. "
+            f"Nivel de riesgo proyectado: <strong>{risk_level}</strong>. "
+            f"El mes de mayor incidencia proyectada es <strong>{peak_str}</strong>. "
             f"El método con mejor desempeño fue <strong>{method_name}</strong> "
             f"con una DMA de {mae:.2f} y una precisión del {accuracy:.1f}%. "
         )
         if pct_change > 15:
             interpretation += (
                 f"Se recomienda reforzar los operativos de seguridad en {canton_title} "
-                f"especialmente para el tipo de delito '{delito_title}'."
+                f"para el tipo de delito '{delito_title}', "
+                f"concentrando esfuerzos preventivos en {peak_str}."
             )
         elif pct_change < -10:
             interpretation += (
                 f"La tendencia sugiere una reducción sostenida, lo cual podría indicar "
-                f"efectividad de las medidas preventivas actuales en {canton_title}."
+                f"efectividad de las medidas preventivas actuales en {canton_title}. "
+                f"Se recomienda evaluar las estrategias aplicadas en el período anterior a {peak_str}."
             )
         else:
             interpretation += (
                 f"El comportamiento proyectado se mantiene relativamente estable. "
-                f"Se recomienda continuar con las estrategias de prevención actuales."
+                f"Se recomienda mantener vigilancia especial en {peak_str} "
+                f"y continuar con las estrategias de prevención actuales."
             )
 
     if best_result.get('method_key') == 'exponential_smoothing' and forecast_values:

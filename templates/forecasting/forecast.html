@@ -27,7 +27,7 @@
                     <label class="block text-xs font-semibold text-slate-700 mb-1.5">Cantón</label>
                     <select name="canton" required
                         class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm bg-white text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10">
-                        <option value="">Seleccionar cantón…</option>
+                        <option value="__ALL_CANTONS__" {% if not form_data.canton or form_data.canton == '__ALL_CANTONS__' %}selected{% endif %}>— Toda la provincia —</option>
                         {% for c in cantons %}
                         <option value="{{ c }}" {% if form_data.canton == c %}selected{% endif %}>{{ c|title }}</option>
                         {% endfor %}
@@ -39,8 +39,7 @@
                     <label class="block text-xs font-semibold text-slate-700 mb-1.5">Tipo de delito</label>
                     <select name="delito" required
                         class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm bg-white text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10">
-                        <option value="">Seleccionar delito…</option>
-                        <option value="__ALL__" {% if form_data.delito == '__ALL__' %}selected{% endif %}>— Todos los delitos —</option>
+                        <option value="__ALL__" {% if not form_data.delito or form_data.delito == '__ALL__' %}selected{% endif %}>— Todos los delitos —</option>
                         {% for d in delitos %}
                         <option value="{{ d }}" {% if form_data.delito == d %}selected{% endif %}>{{ d|title }}</option>
                         {% endfor %}
@@ -537,6 +536,13 @@
         <div class="bg-white rounded-lg p-5 border border-slate-200" style="border-left: 4px solid #1B263B;">
             <h3 class="text-sm font-semibold text-primary mb-2">Interpretación automática</h3>
             <p class="text-sm text-slate-600 leading-relaxed">{{ interpretation|safe }}</p>
+            <p class="text-xs text-slate-600 mt-3 pt-3 border-t border-slate-200">
+                <span class="font-medium text-slate-700">Nivel de riesgo:</span>
+                se clasifica comparando el promedio mensual proyectado con el promedio mensual histórico completo.
+                <strong>Alto</strong> si el pronóstico supera el histórico en más de un 20&nbsp;%;
+                <strong>Bajo</strong> si es inferior en más de un 20&nbsp;%;
+                <strong>Medio</strong> en caso contrario.
+            </p>
         </div>
 
         {% endif %} {# end success #}

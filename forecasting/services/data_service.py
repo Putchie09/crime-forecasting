@@ -414,7 +414,7 @@ def get_dataset_summary() -> dict:
     from forecasting.models import CrimeRecord, MonthlySeries
 
     total_records = CrimeRecord.objects.count()
-    cantons = list(CrimeRecord.objects.values_list('canton', flat=True).distinct().order_by('canton'))
+    cantons = list(CrimeRecord.objects.exclude(canton='DESCONOCIDO').values_list('canton', flat=True).distinct().order_by('canton'))
     delitos = list(CrimeRecord.objects.values_list('delito', flat=True).distinct().order_by('delito'))
 
     fecha_min = CrimeRecord.objects.order_by('fecha').values_list('fecha', flat=True).first()

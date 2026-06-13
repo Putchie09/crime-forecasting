@@ -148,9 +148,9 @@
                 {% for rec in page_obj %}
                 <tr>
                     <td class="font-semibold text-primary text-xs">{{ rec.delito|title }}</td>
-                    <td class="text-xs text-slate-600" title="{{ rec.sub_delito|title|default:'' }}">{{ rec.sub_delito|title|truncatechars:22|default:"—" }}</td>
+                    <td class="text-xs text-slate-600" title="{{ rec.sub_delito|title|default:'' }}">{{ rec.sub_delito|title|truncatechars:15|default:"—" }}</td>
                     <td class="font-mono text-xs">{{ rec.fecha|date:"d/m/Y" }}</td>
-                    <td class="text-xs text-slate-500 max-w-24 truncate" title="{{ rec.hora }}">{{ rec.hora|default:"—" }}</td>
+                    <td class="text-xs text-slate-500 whitespace-nowrap" title="{{ rec.hora }}">{{ rec.hora|default:"—" }}</td>
                     <td class="text-xs">{{ rec.victima|title|default:"—" }}</td>
                     <td class="text-xs text-slate-500 max-w-28 truncate" title="{{ rec.sub_victima }}">{{ rec.sub_victima|title|default:"—" }}</td>
                     <td class="text-xs">{{ rec.edad|title|default:"—" }}</td>
