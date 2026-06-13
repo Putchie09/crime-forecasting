@@ -1,4 +1,4 @@
-# 🔵 Criminalidad Alajuela — Sistema de Pronóstico
+# Criminalidad Alajuela — Sistema de Pronóstico
 
 Sistema web para el análisis y pronóstico de criminalidad en la provincia de Alajuela, Costa Rica.
 Desarrollado con Django 5, Tailwind CSS y Chart.js.
@@ -8,7 +8,7 @@ Universidad de Costa Rica, Sede de Occidente
 
 ---
 
-## 📋 Requisitos del sistema
+## Requisitos del sistema
 
 | Herramienta | Versión mínima |
 |-------------|----------------|
@@ -17,63 +17,53 @@ Universidad de Costa Rica, Sede de Occidente
 
 ---
 
-## ⚡ Instalación rápida
+## Ejecución
 
-### 1. Clonar / descomprimir el proyecto
+El proyecto se distribuye con la base de datos ya cargada (`db.sqlite3` incluida en el ZIP), por lo que en la mayoría de los casos no es necesario importar el dataset manualmente.
+
+---
+
+### Método 1 — Script automático `INICIAR.bat` (Windows, recomendado)
+
+1. Descomprimir el ZIP en cualquier carpeta.
+2. Hacer **doble clic** en `INICIAR.bat` (ubicado dentro de `crime_forecasting/`).
+
+El script se encarga automáticamente de:
+
+- Verificar que Python 3.12+ esté instalado.
+- Crear el entorno virtual `venv/` si no existe.
+- Instalar las dependencias de `requirements.txt` (solo la primera vez, ~5–8 min).
+- Aplicar migraciones pendientes.
+- Detectar el puerto disponible (usa 8000 o 8001 si el primero está ocupado).
+- Abrir el navegador predeterminado en `http://127.0.0.1:<puerto>` automáticamente.
+
+> **Requisito:** Python 3.12+ instalado con la opción **"Add Python to PATH"** marcada durante la instalación.  
+> La ventana de consola debe permanecer abierta mientras se usa el sistema. Para detener el servidor, presione `Ctrl+C` o cierre la ventana.
+
+---
+
+### Método 2 — Manual (Linux/macOS o si el script no funciona)
 
 ```bash
+# 1. Entrar al directorio del proyecto
 cd crime_forecasting
-```
 
-### 2. Crear entorno virtual e instalar dependencias
-
-```bash
-# Crear entorno virtual
+# 2. Crear entorno virtual
 python -m venv venv
 
-# Activar (Linux/macOS)
+# 3. Activar el entorno virtual
+#    Linux / macOS:
 source venv/bin/activate
-
-# Activar (Windows)
+#    Windows (PowerShell / CMD):
 venv\Scripts\activate
 
-# Instalar dependencias
+# 4. Instalar dependencias
 pip install -r requirements.txt
-```
 
-### 3. Copiar el dataset
-
-Copie el archivo `Estadisticas.xlsx` (datos del OIJ) a la carpeta `datasets/`:
-
-```bash
-cp /ruta/al/Estadisticas.xlsx datasets/Estadisticas.xlsx
-```
-
-> **Nota:** El archivo debe mantener el nombre `Estadisticas.xlsx`.  
-> Si su archivo tiene otro nombre, actualice `DATASET_PATH` en `config/settings.py`.
-
-### 4. Crear la base de datos
-
-```bash
+# 5. Aplicar migraciones
 python manage.py migrate
-```
 
-### 5. Cargar el dataset
-
-```bash
-python manage.py load_dataset
-```
-
-Este comando:
-- Lee `datasets/Estadisticas.xlsx`
-- Limpia y valida los datos
-- Filtra registros de la provincia de Alajuela
-- Construye las series de tiempo mensuales
-- Importa todo a la base de datos SQLite
-
-### 6. Iniciar el servidor
-
-```bash
+# 6. Iniciar el servidor
 python manage.py runserver
 ```
 
@@ -81,7 +71,34 @@ Abra el navegador en: **http://127.0.0.1:8000**
 
 ---
 
-## 🗂️ Estructura del proyecto
+### Cargar el dataset desde cero (opcional)
+
+Solo es necesario si la base de datos está vacía o se desea reimportar los datos.
+
+1. Copie el archivo `Estadisticas.xlsx` (datos del OIJ) a la carpeta `datasets/`:
+
+   ```bash
+   cp /ruta/al/Estadisticas.xlsx datasets/Estadisticas.xlsx
+   ```
+
+   > El archivo debe conservar el nombre `Estadisticas.xlsx`. Si tiene otro nombre, actualice `DATASET_PATH` en `config/settings.py`.
+
+2. Ejecute el comando de carga:
+
+   ```bash
+   python manage.py load_dataset
+   ```
+
+   Este comando:
+   - Lee `datasets/Estadisticas.xlsx`
+   - Limpia y valida los datos
+   - Filtra registros de la provincia de Alajuela
+   - Construye las series de tiempo mensuales
+   - Importa todo a la base de datos SQLite
+
+---
+
+## Estructura del proyecto
 
 ```
 crime_forecasting/
@@ -138,7 +155,7 @@ crime_forecasting/
 
 ---
 
-## 🧠 Modelos cuantitativos implementados
+## Modelos cuantitativos implementados
 
 ### 1. Tendencia Lineal (`trend.py`)
 
@@ -173,7 +190,7 @@ Regresión lineal sobre el tiempo: **Y(t) = a + b·t**
 
 ---
 
-## 📊 Métricas de evaluación
+## Métricas de evaluación
 
 | Métrica | Descripción |
 |---------|-------------|
@@ -186,7 +203,7 @@ El sistema **selecciona automáticamente** el mejor modelo según el menor DMA.
 
 ---
 
-## 🖥️ Módulos de la aplicación
+## Módulos de la aplicación
 
 ### 1. Inicio (`/`)
 - KPI cards: total de registros, cantones, tipos de delito, período
@@ -210,7 +227,7 @@ El sistema **selecciona automáticamente** el mejor modelo según el menor DMA.
 
 ---
 
-## 🔧 Comandos útiles
+## Comandos útiles
 
 ```bash
 # Cargar dataset
@@ -230,7 +247,7 @@ python manage.py runserver
 
 ---
 
-## 🎨 Estilo visual
+## Estilo visual
 
 - **Tipografía:** Inter (Google Fonts)
 - **Color principal:** `#1B263B` (azul marino oscuro)
@@ -240,7 +257,7 @@ python manage.py runserver
 
 ---
 
-## 📦 Columnas requeridas en el dataset
+## Columnas requeridas en el dataset
 
 El archivo Excel debe contener las siguientes columnas (el sistema normaliza mayúsculas/minúsculas):
 
@@ -252,7 +269,7 @@ El sistema filtra automáticamente los registros de la **provincia de Alajuela**
 
 ---
 
-## ⚠️ Notas importantes
+## Notas importantes
 
 1. **Datos mínimos para pronóstico:**
    - Tendencia lineal: mínimo 2 meses
