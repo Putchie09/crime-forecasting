@@ -7,12 +7,11 @@ and returns a structured results dictionary for the views.
 """
 
 import logging
-from datetime import date, datetime
-from typing import Optional
 
 import numpy as np
 
 from forecasting.models import MonthlySeries
+from forecasting.services.data_service import get_global_series_range
 from forecasting.forecasting_methods import (
     trend,
     exponential_smoothing,
@@ -43,27 +42,19 @@ def _add_months(year: int, month: int, delta: int):
     return (total_months // 12 + 1, total_months % 12 + 1)
 
 
-def _get_all_delitos_series(
-    canton: str,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
-) -> list:
-    """Build a zero-filled monthly series summing all crime types for the canton."""
+def _get_all_delitos_series(canton: str) -> list:
+    """
+    Build a zero-filled monthly series summing all crime types for the canton.
+
+    The series extends from the canton's first crime month to the global dataset
+    end (not just the canton's last crime month), ensuring trailing zeros are
+    included for months where no crimes were recorded.
+    """
     from django.db.models import Sum
 
-    qs = MonthlySeries.objects.filter(canton=canton.upper())
-
-    if date_from:
-        qs = qs.filter(year__gte=date_from.year).exclude(
-            year=date_from.year, month__lt=date_from.month
-        )
-    if date_to:
-        qs = qs.filter(year__lte=date_to.year).exclude(
-            year=date_to.year, month__gt=date_to.month
-        )
-
     rows = list(
-        qs.values('year', 'month')
+        MonthlySeries.objects.filter(canton=canton.upper())
+        .values('year', 'month')
         .annotate(total=Sum('total_delitos'))
         .order_by('year', 'month')
     )
@@ -72,7 +63,12 @@ def _get_all_delitos_series(
 
     data_map = {(r['year'], r['month']): r['total'] for r in rows}
     start_year, start_month = rows[0]['year'], rows[0]['month']
-    end_year, end_month = rows[-1]['year'], rows[-1]['month']
+
+    global_range = get_global_series_range()
+    if global_range:
+        end_year, end_month = global_range['max_year'], global_range['max_month']
+    else:
+        end_year, end_month = rows[-1]['year'], rows[-1]['month']
 
     series = []
     yr, mo = start_year, start_month
@@ -90,27 +86,13 @@ def _get_all_delitos_series(
     return series
 
 
-def _compute_delito_composition(
-    canton: str,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
-) -> list:
+def _compute_delito_composition(canton: str) -> list:
     """Return list of {delito, total, pct} dicts for the canton, sorted by total desc."""
     from django.db.models import Sum
 
-    qs = MonthlySeries.objects.filter(canton=canton.upper())
-
-    if date_from:
-        qs = qs.filter(year__gte=date_from.year).exclude(
-            year=date_from.year, month__lt=date_from.month
-        )
-    if date_to:
-        qs = qs.filter(year__lte=date_to.year).exclude(
-            year=date_to.year, month__gt=date_to.month
-        )
-
     rows = list(
-        qs.values('delito')
+        MonthlySeries.objects.filter(canton=canton.upper())
+        .values('delito')
         .annotate(total=Sum('total_delitos'))
         .order_by('-total')
     )
@@ -127,56 +109,39 @@ def _compute_delito_composition(
     ]
 
 
-def get_time_series(
-    canton: str,
-    delito: str,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
-) -> list:
+def get_time_series(canton: str, delito: str) -> list:
     """
     Query MonthlySeries for a specific canton and crime type.
     Returns list of dicts: {year, month, total_delitos, label}.
 
-    Months within the data range that had no recorded crimes are filled
-    with total_delitos = 0, so the series has no temporal gaps.  Without
-    this zero-filling, sparse series (e.g. 3 homicides spread over 21 months)
-    collapse to a constant vector that every model fits with DMA = 0.
+    Zero-fills every calendar month from the first event for this
+    canton/delito group to the global dataset end — not just to the
+    last event.  This ensures the series includes trailing zero months
+    (e.g. if no crime of this type occurred in the final 18 months of
+    the dataset) so models are not trained on a falsely optimistic endpoint.
     """
     if delito.upper() == ALL_DELITOS_TOKEN:
-        return _get_all_delitos_series(canton, date_from, date_to)
+        return _get_all_delitos_series(canton)
 
-    qs = MonthlySeries.objects.filter(
-        canton=canton.upper(),
-        delito=delito.upper(),
+    records = list(
+        MonthlySeries.objects.filter(
+            canton=canton.upper(),
+            delito=delito.upper(),
+        ).order_by('year', 'month')
     )
-
-    if date_from:
-        qs = qs.filter(
-            year__gte=date_from.year
-        ).exclude(
-            year=date_from.year, month__lt=date_from.month
-        )
-
-    if date_to:
-        qs = qs.filter(
-            year__lte=date_to.year
-        ).exclude(
-            year=date_to.year, month__gt=date_to.month
-        )
-
-    qs = qs.order_by('year', 'month')
-    records = list(qs)
 
     if not records:
         return []
 
-    # Build lookup so missing months can be filled with 0
     data_map = {(rec.year, rec.month): rec.total_delitos for rec in records}
-
     start_year, start_month = records[0].year, records[0].month
-    end_year, end_month = records[-1].year, records[-1].month
 
-    # Walk every calendar month from first to last event, inserting 0 for gaps
+    global_range = get_global_series_range()
+    if global_range:
+        end_year, end_month = global_range['max_year'], global_range['max_month']
+    else:
+        end_year, end_month = records[-1].year, records[-1].month
+
     series = []
     yr, mo = start_year, start_month
     while (yr, mo) <= (end_year, end_month):
@@ -194,13 +159,7 @@ def get_time_series(
     return series
 
 
-def generate_forecast(
-    canton: str,
-    delito: str,
-    date_from: date,
-    date_to: date,
-    n_months: int,
-) -> dict:
+def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
     """
     Main forecasting entry point.
 
@@ -213,7 +172,7 @@ def generate_forecast(
     display_delito = 'Todos los delitos' if is_all_delitos else delito
 
     # 1. Retrieve time series
-    series_data = get_time_series(canton, delito, date_from, date_to)
+    series_data = get_time_series(canton, delito)
 
     if not series_data:
         return {
@@ -335,9 +294,7 @@ def generate_forecast(
     )
 
     # Composition breakdown (only when querying all crime types)
-    composition_data = (
-        _compute_delito_composition(canton, date_from, date_to) if is_all_delitos else []
-    )
+    composition_data = _compute_delito_composition(canton) if is_all_delitos else []
 
     # 8. Build per-method forecast data for Chart.js
     methods_chart_data = {}

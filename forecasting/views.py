@@ -13,7 +13,7 @@ Three main modules:
 import csv
 import json
 import logging
-from datetime import date, datetime
+from datetime import datetime
 
 from django.conf import settings
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
@@ -28,11 +28,24 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
 from forecasting.models import CrimeRecord, MonthlySeries
-from forecasting.services.data_service import get_dataset_summary
-from forecasting.services.forecast_service import generate_forecast, get_time_series
+from forecasting.services.data_service import get_dataset_summary, get_global_series_range
+from forecasting.services.forecast_service import (
+    generate_forecast, get_time_series, MONTH_NAMES_FULL_ES,
+)
 from forecasting.services.report_service import generate_forecast_pdf
 
 logger = logging.getLogger(__name__)
+
+
+def _get_dataset_period() -> str | None:
+    """Return a human-readable string of the global series date range."""
+    gr = get_global_series_range()
+    if not gr:
+        return None
+    return (
+        f"desde {MONTH_NAMES_FULL_ES[gr['min_month']]} {gr['min_year']} "
+        f"hasta {MONTH_NAMES_FULL_ES[gr['max_month']]} {gr['max_year']}"
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -88,6 +101,7 @@ class ForecastView(View):
         context = {
             'cantons': summary['cantons'],
             'delitos': summary['delitos'],
+            'dataset_period': _get_dataset_period(),
         }
         return render(request, self.template_name, context)
 
@@ -96,13 +110,12 @@ class ForecastView(View):
         context = {
             'cantons': summary['cantons'],
             'delitos': summary['delitos'],
+            'dataset_period': _get_dataset_period(),
         }
 
         # Parse form inputs
         canton = request.POST.get('canton', '').strip().upper()
         delito = request.POST.get('delito', '').strip().upper()
-        date_from_str = request.POST.get('date_from', '').strip()
-        date_to_str = request.POST.get('date_to', '').strip()
         n_months_str = request.POST.get('n_months', '6').strip()
 
         # Validate
@@ -111,18 +124,6 @@ class ForecastView(View):
             errors.append('Debe seleccionar un cantón.')
         if not delito:
             errors.append('Debe seleccionar un tipo de delito.')
-
-        date_from = date_to = None
-        if date_from_str:
-            try:
-                date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
-            except ValueError:
-                errors.append('Fecha de inicio inválida.')
-        if date_to_str:
-            try:
-                date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
-            except ValueError:
-                errors.append('Fecha de fin inválida.')
 
         try:
             n_months = max(1, min(int(n_months_str), 36))
@@ -134,8 +135,8 @@ class ForecastView(View):
             context['form_data'] = request.POST
             return render(request, self.template_name, context)
 
-        # Run forecast
-        results = generate_forecast(canton, delito, date_from, date_to, n_months)
+        # Run forecast using the full historical series (no date truncation)
+        results = generate_forecast(canton, delito, n_months)
 
         context.update(results)
         context['form_data'] = request.POST
@@ -262,28 +263,14 @@ class ExportPDFView(View):
         """
         canton = request.POST.get('canton', '').strip().upper()
         delito = request.POST.get('delito', '').strip().upper()
-        date_from_str = request.POST.get('date_from', '').strip()
-        date_to_str = request.POST.get('date_to', '').strip()
         n_months_str = request.POST.get('n_months', '6').strip()
-
-        date_from = date_to = None
-        if date_from_str:
-            try:
-                date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
-            except ValueError:
-                pass
-        if date_to_str:
-            try:
-                date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
-            except ValueError:
-                pass
 
         try:
             n_months = max(1, min(int(n_months_str), 36))
         except ValueError:
             n_months = 6
 
-        results = generate_forecast(canton, delito, date_from, date_to, n_months)
+        results = generate_forecast(canton, delito, n_months)
 
         if not results.get('success'):
             return HttpResponse(
@@ -386,3 +373,4 @@ def api_time_series(request):
         return JsonResponse({'error': 'canton and delito required'}, status=400)
     series = get_time_series(canton, delito)
     return JsonResponse({'series': series})
+

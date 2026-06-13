@@ -377,6 +377,38 @@ def import_to_database(df: pd.DataFrame, series: pd.DataFrame) -> dict:
     }
 
 
+def get_global_series_range() -> dict | None:
+    """
+    Return the global (min_year, min_month, max_year, max_month) from MonthlySeries.
+
+    Uses two-step aggregation to avoid the independent-Max pitfall: getting
+    Max('year') and Max('month') separately can return a (year, month) pair
+    that never existed in the data (e.g. max_year=2025, max_month=12 from a
+    different year).  We always pin the month query to the correct year.
+    """
+    from django.db.models import Max, Min
+    from forecasting.models import MonthlySeries
+
+    agg = MonthlySeries.objects.aggregate(min_year=Min('year'), max_year=Max('year'))
+    if agg['min_year'] is None:
+        return None
+
+    min_month = MonthlySeries.objects.filter(
+        year=agg['min_year']
+    ).aggregate(m=Min('month'))['m']
+
+    max_month = MonthlySeries.objects.filter(
+        year=agg['max_year']
+    ).aggregate(m=Max('month'))['m']
+
+    return {
+        'min_year': agg['min_year'],
+        'min_month': min_month,
+        'max_year': agg['max_year'],
+        'max_month': max_month,
+    }
+
+
 def get_dataset_summary() -> dict:
     """Return summary statistics for the home page KPI cards."""
     from forecasting.models import CrimeRecord, MonthlySeries
