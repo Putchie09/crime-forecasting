@@ -27,18 +27,8 @@ env/
 # Django
 *.log
 local_settings.py
-db.sqlite3
-db.sqlite3-journal
 media/
 staticfiles/
-
-# Dataset (do not commit – contains sensitive data)
-datasets/Estadisticas.xlsx
-datasets/*.xlsx
-datasets/*.csv
-
-# Generated reports
-reports/*.pdf
 
 # IDE
 .vscode/

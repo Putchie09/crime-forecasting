@@ -43,7 +43,7 @@ CANTONES_ALAJUELA = {
     'NARANJO', 'PALMARES', 'POÁS', 'OROTINA', 'SAN CARLOS',
     'ZARCERO', 'SARCHÍ', 'UPALA', 'LOS CHILES', 'GUATUSO',
     'RÍO CUARTO',
-    # Variantes sin tildes (frecuentes en datasets OIJ)
+    # Variantes sin tildes
     'SAN RAMON', 'POAS', 'SARCHI', 'RIO CUARTO',
 }
 
