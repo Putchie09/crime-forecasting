@@ -1,109 +1,95 @@
 """
-Índices Estacionales (Seasonal Indices) Forecasting Method.
+Método de índices estacionales sin tendencia.
 
-Identifies recurring monthly patterns (seasonality) by computing
-the ratio of each month's average to the overall average.
+Calcula cuánto suele subir o bajar cada mes respecto al promedio general.
+Luego usa esos índices para pronosticar los meses futuros.
 
-Steps:
-  1. Compute the overall mean of the series.
-  2. Compute the monthly average for each calendar month.
-  3. Seasonal index(m) = monthly_avg(m) / overall_mean
-  4. De-seasonalize the series, fit a linear trend.
-  5. Forecast = Trend(t) × SeasonalIndex(month)
+Índice estacional = promedio del mes / promedio general
+
+Un índice mayor a 1 indica que ese mes suele estar por encima del promedio.
+Un índice menor a 1 indica que ese mes suele estar por debajo del promedio.
 """
 
 import numpy as np
 from typing import List
-from datetime import date
 
-
+# Función que ajusta el modelo y pronostica los meses futuros
 def fit_and_forecast(
     values: List[float],
     n_forecast: int,
     start_year: int,
     start_month: int,
 ) -> dict:
-    """
-    Fit seasonal index model and generate forecasts.
-
-    Args:
-        values: Historical monthly time series values.
-        n_forecast: Number of future periods to forecast.
-        start_year: Year of the first observation.
-        start_month: Month of the first observation (1–12).
-
-    Returns:
-        dict with fitted values, forecasts, metrics, and parameters.
-    """
+    
     n = len(values)
+
+    # Validación de cantidad mínima de datos
     if n < 12:
         raise ValueError("Se necesitan al menos 12 meses de datos para calcular índices estacionales.")
 
-    y = np.array(values, dtype=float)
+    y = np.array(values, dtype=float) 
 
-    # Build month indices for each observation
+    # Se identifica a qué mes pertenece cada dato histórico
     months = []
-    yr, mo = start_year, start_month
+    mo = start_month
+
     for _ in range(n):
         months.append(mo)
         mo += 1
+
         if mo > 12:
             mo = 1
-            yr += 1
 
-    months = np.array(months)
+    months = np.array(months) # array de meses correspondientes a cada dato histórico (1-12)
 
-    # Compute seasonal indices (1–12)
+    # Promedio general de todos los datos
     overall_mean = np.mean(y) if np.mean(y) != 0 else 1.0
+
+    # Índice estacional de cada mes:
+    # promedio del mes / promedio general
     seasonal_indices = {}
-    for m in range(1, 13):
+
+    for m in range(1, 13): # para cada mes del año
         mask = months == m
+
         if mask.any():
-            seasonal_indices[m] = float(np.mean(y[mask])) / overall_mean
+            seasonal_indices[m] = float(np.mean(y[mask])) / overall_mean #calcula el promedio del mes y lo divide por el promedio general.
         else:
-            seasonal_indices[m] = 1.0  # No data for this month → neutral index
+            seasonal_indices[m] = 1.0
 
-    # De-seasonalize
-    si_array = np.array([seasonal_indices[m] for m in months])
-    si_array = np.where(si_array == 0, 1.0, si_array)
-    y_deseason = y / si_array
+    # Valores ajustados para comparar contra los datos históricos
+    fitted = []
 
-    # Fit linear trend to de-seasonalized series
-    t = np.arange(1, n + 1, dtype=float)
-    t_mean = t.mean()
-    yd_mean = y_deseason.mean()
-    b = np.sum((t - t_mean) * (y_deseason - yd_mean)) / np.sum((t - t_mean) ** 2)
-    a = yd_mean - b * t_mean
+    for m in months:
+        fitted.append(overall_mean * seasonal_indices[m]) # multiplica el promedio general por el índice estacional del mes correspondiente para obtener el valor ajustado para ese mes.
 
-    trend_fitted = a + b * t
-
-    # Re-apply seasonal indices to get fitted values
-    fitted = trend_fitted * si_array
+    fitted = np.array(fitted)
     fitted = np.maximum(fitted, 0)
 
-    # Forecast future periods
+    # Pronóstico de meses futuros
     forecast = []
     future_months = []
-    yr_f, mo_f = yr, mo  # continues from where the series ended
-    for i in range(1, n_forecast + 1):
-        t_f = n + i
-        trend_f = a + b * t_f
-        si_f = seasonal_indices.get(mo_f, 1.0)
-        forecast.append(max(0.0, trend_f * si_f))
+
+    mo_f = mo
+
+    # Para cada mes futuro a pronosticar, se calcula el pronóstico multiplicando el promedio general por el índice estacional del mes correspondiente.
+    for _ in range(n_forecast):
+        si_f = seasonal_indices.get(mo_f, 1.0) # obtiene el índice estacional del mes futuro, o 1.0 si no existe
+        forecast.append(max(0.0, overall_mean * si_f)) 
         future_months.append(mo_f)
+
         mo_f += 1
         if mo_f > 12:
             mo_f = 1
 
     forecast = np.array(forecast)
 
-    # Metrics
-    errors = np.abs(y - fitted)
+    # Métricas de error
+    errors = np.abs(y - fitted) # se restan los valores ajustados a los datos históricos para obtener los errores absolutos
     mae = float(np.mean(errors))
     mse = float(np.mean((y - fitted) ** 2))
     rmse = float(np.sqrt(mse))
-    mean_y = overall_mean if overall_mean != 0 else 1.0
-    accuracy = max(0.0, float((1 - mae / mean_y) * 100))
+    accuracy = max(0.0, float((1 - mae / overall_mean) * 100))
 
     return {
         'method_name': 'Índices Estacionales',
@@ -115,9 +101,8 @@ def fit_and_forecast(
         'rmse': round(rmse, 4),
         'accuracy': round(accuracy, 2),
         'params': {
-            'trend_intercept': round(float(a), 4),
-            'trend_slope': round(float(b), 4),
+            'overall_mean': round(float(overall_mean), 4),
             'seasonal_indices': {str(k): round(v, 4) for k, v in seasonal_indices.items()},
         },
-        'description': 'Tendencia lineal con índices estacionales mensuales',
+        'description': 'Índices estacionales mensuales sin tendencia',
     }

@@ -383,7 +383,25 @@
                     El SES proyecta un nivel constante para todos los períodos futuros — no modela tendencia ni estacionalidad.
                 </p>
 
-                {% elif best_method_key == 'seasonal_index' or best_method_key == 'multiplicative_decomposition' %}
+                {% elif best_method_key == 'seasonal_index' %}
+                {% if best_params.overall_mean is defined %}
+                <div class="flex flex-wrap items-start gap-8 mb-5">
+                    <div>
+                        <p class="text-xs text-slate-500 mb-0.5">Promedio general histórico</p>
+                        <p class="text-lg font-bold text-primary font-mono">{{ best_params.overall_mean }}</p>
+                    </div>
+                </div>
+                {% endif %}
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Índices estacionales mensuales</p>
+                <div class="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                    {% for si in best_seasonal_list %}
+                    <div class="border border-slate-100 rounded p-2 text-center">
+                        <p class="text-xs text-slate-400">{{ si.month_name }}</p>
+                        <p class="text-sm font-bold {% if si.value > 1 %}text-red-600{% else %}text-green-700{% endif %} font-mono">{{ si.value }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% elif best_method_key == 'multiplicative_decomposition' %}
                 <div class="flex flex-wrap items-start gap-8 mb-5">
                     <div>
                         <p class="text-xs text-slate-500 mb-0.5">Intercepto tendencia (a)</p>

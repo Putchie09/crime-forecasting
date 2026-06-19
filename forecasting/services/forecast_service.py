@@ -734,27 +734,44 @@ def _generate_interpretation(
         risk_level = 'Medio'
 
     if is_all_delitos:
-        interpretation = (
-            f"El sistema proyecta aproximadamente <strong>{round(forecast_avg, 1)}</strong> delitos mensuales "
-            f"para los próximos {n_months} meses en el cantón de {canton_title}, "
-            f"considerando todos los tipos de delito registrados. "
-            f"Nivel de riesgo proyectado: <strong>{risk_level}</strong>. "
-            f"El mes de mayor incidencia proyectada es <strong>{peak_str}</strong>. "
-            f"El método con mejor desempeño fue <strong>{method_name}</strong> "
-            f"con una DMA de {mae:.2f} y una precisión del {accuracy:.1f}%. "
-        )
+        if best_result.get('method_key') == 'seasonal_index':
+            interpretation = (
+                f"El pronóstico promedio para los próximos {n_months} meses es "
+                f"{abs_pct}% {'mayor' if pct_change >= 0 else 'menor'} que el promedio histórico mensual, "
+                f"principalmente por el efecto estacional de los meses proyectados. "
+                f"Nivel de riesgo proyectado: <strong>{risk_level}</strong>. "
+                f"El mes de mayor incidencia proyectada es <strong>{peak_str}</strong>. "
+                f"El método con mejor desempeño fue <strong>{method_name}</strong> "
+                f"con una DMA de {mae:.2f} y una precisión del {accuracy:.1f}%. "
+            )
+        else:
+            interpretation = (
+                f"El sistema proyecta aproximadamente <strong>{round(forecast_avg, 1)}</strong> delitos mensuales "
+                f"para los próximos {n_months} meses en el cantón de {canton_title}, "
+                f"considerando todos los tipos de delito registrados. "
+                f"Nivel de riesgo proyectado: <strong>{risk_level}</strong>. "
+                f"El mes de mayor incidencia proyectada es <strong>{peak_str}</strong>. "
+                f"El método con mejor desempeño fue <strong>{method_name}</strong> "
+                f"con una DMA de {mae:.2f} y una precisión del {accuracy:.1f}%. "
+            )
         if pct_change > 15:
             interpretation += (
-                f"Se proyecta un {direction} del {abs_pct}% respecto al promedio reciente. "
                 f"Se recomienda reforzar los operativos de seguridad en {canton_title}, "
                 f"con especial atención en {peak_str}."
             )
         elif pct_change < -10:
-            interpretation += (
-                f"Se proyecta una reducción del {abs_pct}% respecto al promedio reciente. "
-                f"Podría indicar efectividad de las medidas preventivas actuales. "
-                f"Se recomienda evaluar qué estrategias mantener para sostener la tendencia."
-            )
+            if best_result.get('method_key') == 'seasonal_index':
+                interpretation += (
+                    f"El pronóstico indica una disminución respecto al promedio histórico, "
+                    f"probablemente por los meses de menor estacionalidad proyectados. "
+                    f"Se recomienda evaluar las estrategias aplicadas para entender mejor el patrón." 
+                )
+            else:
+                interpretation += (
+                    f"Se proyecta una reducción del {abs_pct}% respecto al promedio reciente. "
+                    f"Podría indicar efectividad de las medidas preventivas actuales. "
+                    f"Se recomienda evaluar qué estrategias mantener para sostener la tendencia."
+                )
         else:
             interpretation += (
                 f"El comportamiento proyectado se mantiene relativamente estable "
@@ -764,14 +781,25 @@ def _generate_interpretation(
             )
     else:
         delito_title = delito.lower()
-        interpretation = (
-            f"Se proyecta un {direction} del {abs_pct}% en los casos de {delito_title} "
-            f"para los próximos {n_months} meses en el cantón de {canton_title}. "
-            f"Nivel de riesgo proyectado: <strong>{risk_level}</strong>. "
-            f"El mes de mayor incidencia proyectada es <strong>{peak_str}</strong>. "
-            f"El método con mejor desempeño fue <strong>{method_name}</strong> "
-            f"con una DMA de {mae:.2f} y una precisión del {accuracy:.1f}%. "
-        )
+        if best_result.get('method_key') == 'seasonal_index':
+            interpretation = (
+                f"El pronóstico promedio para los próximos {n_months} meses es "
+                f"{abs_pct}% {'mayor' if pct_change >= 0 else 'menor'} que el promedio histórico mensual, "
+                f"principalmente por el efecto estacional de los meses proyectados. "
+                f"Nivel de riesgo proyectado: <strong>{risk_level}</strong>. "
+                f"El mes de mayor incidencia proyectada es <strong>{peak_str}</strong>. "
+                f"El método con mejor desempeño fue <strong>{method_name}</strong> "
+                f"con una DMA de {mae:.2f} y una precisión del {accuracy:.1f}%. "
+            )
+        else:
+            interpretation = (
+                f"Se proyecta un {direction} del {abs_pct}% en los casos de {delito_title} "
+                f"para los próximos {n_months} meses en el cantón de {canton_title}. "
+                f"Nivel de riesgo proyectado: <strong>{risk_level}</strong>. "
+                f"El mes de mayor incidencia proyectada es <strong>{peak_str}</strong>. "
+                f"El método con mejor desempeño fue <strong>{method_name}</strong> "
+                f"con una DMA de {mae:.2f} y una precisión del {accuracy:.1f}%. "
+            )
         if pct_change > 15:
             interpretation += (
                 f"Se recomienda reforzar los operativos de seguridad en {canton_title} "
@@ -779,11 +807,18 @@ def _generate_interpretation(
                 f"concentrando esfuerzos preventivos en {peak_str}."
             )
         elif pct_change < -10:
-            interpretation += (
-                f"La tendencia sugiere una reducción sostenida, lo cual podría indicar "
-                f"efectividad de las medidas preventivas actuales en {canton_title}. "
-                f"Se recomienda evaluar las estrategias aplicadas en el período anterior a {peak_str}."
-            )
+            if best_result.get('method_key') == 'seasonal_index':
+                interpretation += (
+                    f"El pronóstico indica una disminución respecto al promedio histórico, "
+                    f"probablemente por los meses de menor estacionalidad proyectados. "
+                    f"Se recomienda evaluar las estrategias aplicadas para entender mejor el patrón."
+                )
+            else:
+                interpretation += (
+                    f"La tendencia sugiere una reducción sostenida, lo cual podría indicar "
+                    f"efectividad de las medidas preventivas actuales en {canton_title}. "
+                    f"Se recomienda evaluar las estrategias aplicadas en el período anterior a {peak_str}."
+                )
         else:
             interpretation += (
                 f"El comportamiento proyectado se mantiene relativamente estable. "
