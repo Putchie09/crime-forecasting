@@ -1,17 +1,13 @@
 """
-Servicio de generación de informes PDF — diseño ejecutivo profesional.
+Servicio encargado de generar los reportes PDF del sistema.
 
-Produce un informe PDF de varias páginas que incluye:
-  - Página de portada con marca de cantón/tipo de delito
-  - Resumen ejecutivo con tarjetas KPI
-  - Gráficos incrustados de matplotlib (serie histórica + pronóstico, comparación de MAE por modelo)
-  - Tabla comparativa de modelos con resaltado visual
-  - Conclusiones basadas en los resultados
+A partir de los resultados del pronóstico, construye un informe con
+portada, indicadores principales, gráficos, tablas comparativas y
+conclusiones para apoyar el análisis de los resultados.
 
-Admite dos modos de informe:
-  - Estándar: un tipo de delito, cuatro modelos comparados, el mejor seleccionado por DMA.
-  - Bottom-Up (is_aggregated_forecast=True): todos los tipos de delito modelados individualmente
-    y luego agregados; muestra un desglose por tipo en lugar de comparación de modelos.
+El informe puede generarse en dos modalidades:
+    - Pronóstico estándar para un tipo de delito.
+    - Pronóstico Bottom-Up para todos los tipos de delito agregados.
 """
 
 import io
@@ -72,15 +68,17 @@ _MONTH_SHORT = {
 # ── Normalización del contexto Bottom-Up ───────────────────────────────────────
 def _normalize_bottom_up_for_pdf(ctx: dict) -> dict:
     """
-    El dict de resultados Bottom-Up omite claves que las secciones estándar del PDF esperan
-    (best_method, best_mae, best_accuracy, best_forecast, best_fitted, series ...).
-    Esta función las añade con sustitutos semánticamente correctos para que todas las secciones
-    puedan renderizar sin fallar. Se devuelve una copia superficial; el original no se
-    muta.
+    Los resultados Bottom-Up tienen una estructura diferente a la utilizada por
+    los reportes estándar. Esta función agrega los campos necesarios para que
+    todas las secciones del PDF puedan generarse sin problemas.
+
+    Se devuelve una copia del diccionario original, sin modificarlo.
     """
     out = dict(ctx)
 
-    # Reconstruye la lista 'series' (diccionarios con año/mes) a partir de historical_labels
+    # Genera la estructura de series históricas a partir de las etiquetas disponibles
+    # Se agregan valores equivalentes para que las secciones del PDF
+    # puedan trabajar con un formato uniforme
     if 'series' not in out:
         hist_labels = out.get('historical_labels', [])
         hist_values = out.get('historical_values', [])
@@ -159,9 +157,10 @@ def _apply_ax_style(ax):
 
 def _chart_series_forecast(ctx: dict):
     """
-    Gráfico de líneas: serie histórica completa + ajuste de modelo + pronóstico.
-    Devuelve bytes PNG o None si matplotlib no está disponible o faltan datos.
-    En modo Bottom-Up se omite la línea de ajuste (best_fitted está vacío).
+    Construye el gráfico que compara los datos históricos con el pronóstico.
+    En los reportes estándar también se muestra la línea de ajuste del modelo.
+    En los reportes Bottom-Up esta línea se omite porque el pronóstico proviene
+    de la combinación de varios modelos.
     """
     if not _HAS_MPL:
         return None
@@ -233,7 +232,7 @@ def _chart_mae_comparison(metrics: list):
     """
     Gráfico de barras horizontales comparando el DMA de todos los modelos.
     El mejor modelo se destaca en naranja; los demás en azul grisáceo.
-    Devuelve None si metrics está vacío (por ejemplo, modo Bottom-Up).
+    Devuelve None si metrics está vacío. Por ejemplo, modo Bottom-Up.
     """
     if not _HAS_MPL or not metrics:
         return None
@@ -275,8 +274,10 @@ def _make_image(png_bytes: bytes, width: float, height: float):
 # ── Canvas callbacks ──────────────────────────────────────────────────────────
 def _draw_cover(canvas, _doc, ctx: dict):
     """
-    Dibuja una portada limpia y minimalista sobre fondo blanco.
-    Se invoca como callback onFirstPage — no se renderizan flowables aquí.
+    Construye la portada del reporte con la información general del análisis
+    y los principales indicadores del pronóstico.
+
+    La portada se dibuja directamente en la primera página del PDF.
     """
     canvas.saveState()
     w, h = PAGE_W, PAGE_H
@@ -413,7 +414,8 @@ def _draw_cover(canvas, _doc, ctx: dict):
 
 def _draw_content_page(canvas, _doc, ctx: dict):
     """
-    Draw running header and footer on every content page (pages 2+).
+    Agrega el encabezado y el pie de página en todas las páginas del contenido
+    del reporte para mantener una presentación uniforme.
     """
     canvas.saveState()
     w = PAGE_W
@@ -471,7 +473,7 @@ def _section_heading(text: str, S: dict, accent_color=None) -> list:
 
 def _section_executive_summary(ctx: dict, S: dict) -> list:
     """
-    4 tarjetas KPI + un bloque de texto conciso que resume los hallazgos clave.
+    4 tarjetas KPI y un bloque de texto conciso que resume los hallazgos clave.
     Sin texto de relleno — cada frase se deriva de los datos reales.
     """
     elems = _section_heading('Resumen ejecutivo', S, C_ORANGE)
