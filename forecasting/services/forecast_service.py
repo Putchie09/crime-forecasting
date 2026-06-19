@@ -1,9 +1,9 @@
 """
-Servicio de Pronóstico – orquesta todos los modelos cuantitativos.
+Servicio principal de pronósticos.
 
-Recupera la serie temporal mensual desde la base de datos,
-Ejecuta los cuatro métodos de pronóstico, compara su desempeño
-y devuelve un diccionario de resultados estructurado para las vistas.
+Obtiene los datos históricos, ejecuta los modelos de pronóstico,
+compara los resultados y devuelve la información que se mostrará
+al usuario.
 """
 
 import logging
@@ -36,11 +36,11 @@ MONTH_NAMES_FULL_ES = {
     9: 'Setiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
 }
 
-# ── Umbrales de clasificación según volumen de la serie ────────────────────
+# ── Umbrales para clasificar la frecuencia de los delitos ────────────────────
 # Promedio mensual de delitos que determina qué modelo se aplica por tipo de delito.
-FREQ_LOW_THRESHOLD = 1.0     # mean < 1   → baja frecuencia  (Tendencia Lineal o promedio)
-FREQ_MEDIUM_THRESHOLD = 5.0  # 1 ≤ mean < 5 → frecuencia media  (SES)
-                             # mean ≥ 5   → alta frecuencia (todos los 4 modelos, mejor por MAE)
+FREQ_LOW_THRESHOLD = 1.0     # # Menos de 1 caso por mes  (Tendencia Lineal o promedio)
+FREQ_MEDIUM_THRESHOLD = 5.0  # Entre 1 y 5 casos por mes 
+                             # Más de 5 casos por mes (todos los 4 modelos, mejor por MAE)
 
 
 def _add_months(year: int, month: int, delta: int):
@@ -698,9 +698,11 @@ def _generate_interpretation(
     if not values or not forecast_values:
         return "No hay datos suficientes para generar una interpretación."
 
+    # Compara el pronóstico contra el promedio reciente
     recent_avg = np.mean(values[-6:]) if len(values) >= 6 else np.mean(values)
     forecast_avg = np.mean(forecast_values)
 
+    # Calcula el porcentaje de cambio entre el histórico reciente y el pronóstico
     if recent_avg > 0:
         pct_change = ((forecast_avg - recent_avg) / recent_avg) * 100
     else:
@@ -714,7 +716,7 @@ def _generate_interpretation(
     mae = best_result['mae']
     accuracy = best_result['accuracy']
 
-    # Mes proyectado de mayor incidencia
+    # Identifica el mes con mayor cantidad proyectada
     peak_idx = int(np.argmax(forecast_values))
     peak_count = round(float(forecast_values[peak_idx]))
     if forecast_labels and peak_idx < len(forecast_labels):
@@ -725,7 +727,7 @@ def _generate_interpretation(
     else:
         peak_str = f"el mes {peak_idx + 1} ({peak_count} casos)"
 
-    # Nivel de riesgo relativo a la media histórica completa
+    # Clasifica el riesgo comparando el pronóstico con el promedio histórico general
     hist_mean = float(np.mean(values)) if values else 0.0
     if hist_mean > 0:
         ratio = float(forecast_avg) / hist_mean
@@ -734,6 +736,7 @@ def _generate_interpretation(
         risk_level = 'Medio'
 
     if is_all_delitos:
+        # Caso especial para índices estacionales, ya que este método no usa tendencia
         if best_result.get('method_key') == 'seasonal_index':
             interpretation = (
                 f"El pronóstico promedio para los próximos {n_months} meses es "
@@ -754,6 +757,7 @@ def _generate_interpretation(
                 f"El método con mejor desempeño fue <strong>{method_name}</strong> "
                 f"con una DMA de {mae:.2f} y una precisión del {accuracy:.1f}%. "
             )
+        # Ajusta la recomendación según el cambio proyectado
         if pct_change > 15:
             interpretation += (
                 f"Se recomienda reforzar los operativos de seguridad en {canton_title}, "
@@ -825,7 +829,7 @@ def _generate_interpretation(
                 f"Se recomienda mantener vigilancia especial en {peak_str} "
                 f"y continuar con las estrategias de prevención actuales."
             )
-
+    # Nota adicional para suavizamiento exponencial cuando el pronóstico es constante
     if best_result.get('method_key') == 'exponential_smoothing' and forecast_values:
         if len(set(forecast_values)) <= 1:
             interpretation += (

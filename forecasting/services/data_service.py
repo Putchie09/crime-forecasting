@@ -1,8 +1,9 @@
 """
-Servicio de carga y procesamiento de datos.
+Servicio para cargar y preparar los datos
 
-Lee el dataset de OIJ en Excel/CSV, valida, limpia, normaliza y construye
-la serie temporal mensual agregada que se almacena en la base de datos.
+Este módulo lee el archivo del OIJ en Excel o CSV, revisa que la información
+tenga las columnas necesarias, limpia los datos principales y genera una
+serie mensual que luego se guarda en la base de datos
 """
 
 import logging
@@ -238,7 +239,7 @@ def clean_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
     # Estrategia en dos capas:
     #   a) Mantener registros donde Provincia contiene 'ALAJUELA'
     #   b) Mantener también registros donde Provincia está vacía PERO el
-    #      Canton pertenece a la lista canónica de cantones de Alajuela.
+    #      Canton pertenece a la lista de cantones de Alajuela.
     #      Esto evita descartar registros de Alajuela con error de ingreso
     #      en el campo Provincia.
     _before = len(df)
@@ -297,7 +298,12 @@ def _step(rule: str, justification: str, classification: str,
 
 def build_monthly_series(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Agrega los datos limpios en series temporales mensuales.
+    Agrega los datos limpios en series temporales mensuales
+
+    A partir de los registros ya limpios, cuenta cuántos delitos ocurrieron
+    por mes, cantón y tipo de delito. El resultado es una serie temporal
+    agregada lista para almacenarse en la base de datos y utilizarse en
+    los análisis y pronósticos
 
     Devuelve un DataFrame con columnas:
         year, month, canton, delito, total_delitos
@@ -323,10 +329,10 @@ def build_monthly_series(df: pd.DataFrame) -> pd.DataFrame:
 @transaction.atomic
 def import_to_database(df: pd.DataFrame, series: pd.DataFrame) -> dict:
     """
-    Persiste los registros limpios y la serie mensual en la base de datos.
-    Borra los datos existentes antes de importar (estrategia de actualización completa).
+    Persiste los registros limpios y la serie mensual en la base de datos
+    Borra los datos existentes antes de importar 
 
-    Devuelve un diccionario resumen con los conteos.
+    Devuelve un diccionario resumen con los conteos
     """
     from forecasting.models import CrimeRecord, MonthlySeries
 
@@ -410,7 +416,7 @@ def get_global_series_range() -> dict | None:
 
 
 def get_dataset_summary() -> dict:
-    """Devuelve estadísticas resumidas para las tarjetas KPI de la página de inicio."""
+    """Devuelve estadísticas resumidas para las tarjetas KPI de la pagina de inicio"""
     from forecasting.models import CrimeRecord, MonthlySeries
 
     total_records = CrimeRecord.objects.count()
