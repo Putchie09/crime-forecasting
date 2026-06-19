@@ -1,17 +1,17 @@
 """
-PDF Report Generation Service — Professional Executive Design.
+Servicio de generación de informes PDF — diseño ejecutivo profesional.
 
-Produces a multi-page PDF report including:
-  - Cover page with canton/crime-type branding
-  - Executive summary with KPI cards
-  - Embedded matplotlib charts (historical series + forecast, model MAE comparison)
-  - Model comparison table with visual highlighting
-  - Data-driven conclusions derived from actual results
+Produce un informe PDF de varias páginas que incluye:
+  - Página de portada con marca de cantón/tipo de delito
+  - Resumen ejecutivo con tarjetas KPI
+  - Gráficos incrustados de matplotlib (serie histórica + pronóstico, comparación de MAE por modelo)
+  - Tabla comparativa de modelos con resaltado visual
+  - Conclusiones basadas en los resultados
 
-Supports two report modes:
-  - Standard: single crime type, four models compared, best selected by MAE.
-  - Bottom-Up (is_aggregated_forecast=True): all crime types modelled individually
-    then aggregated; shows per-type breakdown instead of model comparison.
+Admite dos modos de informe:
+  - Estándar: un tipo de delito, cuatro modelos comparados, el mejor seleccionado por DMA.
+  - Bottom-Up (is_aggregated_forecast=True): todos los tipos de delito modelados individualmente
+    y luego agregados; muestra un desglose por tipo en lugar de comparación de modelos.
 """
 
 import io
@@ -38,15 +38,15 @@ from reportlab.lib.enums import TA_CENTER
 
 logger = logging.getLogger(__name__)
 
-# ── Page geometry ─────────────────────────────────────────────────────────────
+# ── Geometría de página ─────────────────────────────────────────────────────────
 PAGE_W, PAGE_H = A4                 # 595 × 842 pt
 MARGIN_L = 2.2 * cm
 MARGIN_R = 2.2 * cm
-MARGIN_T = 3.0 * cm                 # space reserved for running header
-MARGIN_B = 2.0 * cm                 # space reserved for footer
+MARGIN_T = 3.0 * cm                 # espacio reservado para el encabezado
+MARGIN_B = 2.0 * cm                 # espacio reservado para el pie de página
 CONTENT_W = PAGE_W - MARGIN_L - MARGIN_R   # ≈ 16.6 cm
 
-# ── Brand palette ─────────────────────────────────────────────────────────────
+# ── Paleta de marca ─────────────────────────────────────────────────────────────
 C_NAVY   = HexColor('#1B263B')
 C_BLUE   = HexColor('#2563EB')
 C_ORANGE = HexColor('#F97316')
@@ -56,7 +56,7 @@ C_GRAY   = HexColor('#64748B')
 C_BORDER = HexColor('#E2E8F0')
 C_TEXT   = HexColor('#111827')
 C_MUTED  = HexColor('#94A3B8')
-C_COVER  = HexColor('#0F172A')      # darker navy for cover background
+C_COVER  = HexColor('#0F172A')      # azul marino oscuro para fondo de portada
 
 _MONTH_ES = {
     1:'Enero', 2:'Febrero', 3:'Marzo', 4:'Abril',
@@ -69,18 +69,18 @@ _MONTH_SHORT = {
 }
 
 
-# ── Bottom-Up context normalisation ──────────────────────────────────────────
+# ── Normalización del contexto Bottom-Up ───────────────────────────────────────
 def _normalize_bottom_up_for_pdf(ctx: dict) -> dict:
     """
-    The Bottom-Up result dict omits keys that the standard PDF sections expect
-    (best_method, best_mae, best_accuracy, best_forecast, best_fitted, series …).
-    This function adds them with semantically correct substitutes so all sections
-    can render without crashing.  A shallow copy is returned; the original is
-    not mutated.
+    El dict de resultados Bottom-Up omite claves que las secciones estándar del PDF esperan
+    (best_method, best_mae, best_accuracy, best_forecast, best_fitted, series ...).
+    Esta función las añade con sustitutos semánticamente correctos para que todas las secciones
+    puedan renderizar sin fallar. Se devuelve una copia superficial; el original no se
+    muta.
     """
     out = dict(ctx)
 
-    # Reconstruct 'series' list (dicts with year/month) from historical_labels
+    # Reconstruye la lista 'series' (diccionarios con año/mes) a partir de historical_labels
     if 'series' not in out:
         hist_labels = out.get('historical_labels', [])
         hist_values = out.get('historical_values', [])
@@ -94,15 +94,15 @@ def _normalize_bottom_up_for_pdf(ctx: dict) -> dict:
             for lbl, val in zip(hist_labels, hist_values)
         ]
 
-    # Synthetic model fields
+    # Campos sintéticos del modelo
     out.setdefault('best_method',     'Pronóstico Bottom-Up')
     out.setdefault('best_method_key', 'bottom_up')
-    out.setdefault('best_mae',        None)         # N/A for Bottom-Up
-    out.setdefault('best_accuracy',   None)         # N/A for Bottom-Up
+    out.setdefault('best_mae',        None)         # No aplicable para Bottom-Up
+    out.setdefault('best_accuracy',   None)         # No aplicable para Bottom-Up
     out.setdefault('best_forecast',   out.get('bottom_up_forecast', []))
     out.setdefault('best_forecast_raw', out.get('bottom_up_forecast', []))
-    out.setdefault('best_fitted',     [])           # no single fitted line
-    out.setdefault('metrics_comparison', [])        # no per-model comparison
+    out.setdefault('best_fitted',     [])           # no hay una sola línea ajustada
+    out.setdefault('metrics_comparison', [])        # no hay comparación por modelo
     out.setdefault('best_seasonal_list', [])
 
     return out
@@ -159,9 +159,9 @@ def _apply_ax_style(ax):
 
 def _chart_series_forecast(ctx: dict):
     """
-    Line chart: full historical series + model fit + forecast.
-    Returns PNG bytes or None if matplotlib is unavailable or data is missing.
-    For Bottom-Up mode the fitted line is omitted (best_fitted is empty).
+    Gráfico de líneas: serie histórica completa + ajuste de modelo + pronóstico.
+    Devuelve bytes PNG o None si matplotlib no está disponible o faltan datos.
+    En modo Bottom-Up se omite la línea de ajuste (best_fitted está vacío).
     """
     if not _HAS_MPL:
         return None
@@ -180,17 +180,17 @@ def _chart_series_forecast(ctx: dict):
     fig, ax = plt.subplots(figsize=(12, 3.9), facecolor='white')
     _apply_ax_style(ax)
 
-    # Historical area + line
+    # Área histórica + línea
     ax.fill_between(range(n), hist_values, alpha=0.09, color='#1B263B')
     ax.plot(range(n), hist_values, color='#1B263B', linewidth=1.6,
             label='Serie histórica', zorder=3)
 
-    # Model fit (dashed) — skipped for Bottom-Up (fitted=[])
+    # Ajuste del modelo (discontinuo) — se omite para Bottom-Up (fitted=[])
     if fitted and len(fitted) == n:
         ax.plot(range(n), fitted, color='#2563EB', linewidth=0.85,
                 linestyle='--', alpha=0.65, label='Ajuste del modelo', zorder=2)
 
-    # Forecast (connects smoothly from last historical point)
+    # Pronóstico (conecta suavemente desde el último punto histórico)
     x_fore = list(range(n - 1, n + len(fore_values)))
     y_fore = [hist_values[-1]] + list(fore_values)
     ax.fill_between(x_fore, y_fore, alpha=0.12, color='#F97316')
@@ -200,13 +200,13 @@ def _chart_series_forecast(ctx: dict):
     ax.plot(x_fore, y_fore, color='#F97316', linewidth=2.0,
             label=forecast_label, marker='o', markersize=3.5, zorder=4)
 
-    # Vertical divider between historical and forecast
+    # Divisor vertical entre histórico y pronóstico
     ax.axvline(x=n - 1, color='#CBD5E1', linestyle='--', linewidth=0.8)
     y_top = ax.get_ylim()[1]
     ax.text(n - 0.5, y_top * 0.95, 'pronóstico →', fontsize=7,
             color='#94A3B8', va='top', ha='left')
 
-    # X-axis: show only year boundaries to avoid label crowding
+    # Eje X: mostrar solo los límites de año para evitar congestión de etiquetas
     all_labels = hist_labels + fore_labels
     xt, xl = [], []
     for i, lbl in enumerate(all_labels):
@@ -231,9 +231,9 @@ def _chart_series_forecast(ctx: dict):
 
 def _chart_mae_comparison(metrics: list):
     """
-    Horizontal bar chart comparing MAE across all models.
-    Best model highlighted in orange; others in light blue-gray.
-    Returns None if metrics is empty (e.g. Bottom-Up mode).
+    Gráfico de barras horizontales comparando el DMA de todos los modelos.
+    El mejor modelo se destaca en naranja; los demás en azul grisáceo.
+    Devuelve None si metrics está vacío (por ejemplo, modo Bottom-Up).
     """
     if not _HAS_MPL or not metrics:
         return None
@@ -266,7 +266,7 @@ def _chart_mae_comparison(metrics: list):
 
 
 def _make_image(png_bytes: bytes, width: float, height: float):
-    """Wrap PNG bytes in a ReportLab Image flowable."""
+    """Envuelve bytes PNG en un flujo de imagen de ReportLab."""
     from reportlab.platypus import Image as RLImage
     buf = io.BytesIO(png_bytes)
     return RLImage(buf, width=width, height=height)
@@ -275,24 +275,24 @@ def _make_image(png_bytes: bytes, width: float, height: float):
 # ── Canvas callbacks ──────────────────────────────────────────────────────────
 def _draw_cover(canvas, _doc, ctx: dict):
     """
-    Render a clean, minimal cover page on white background.
-    Called as the onFirstPage callback — no flowables render here.
+    Dibuja una portada limpia y minimalista sobre fondo blanco.
+    Se invoca como callback onFirstPage — no se renderizan flowables aquí.
     """
     canvas.saveState()
     w, h = PAGE_W, PAGE_H
 
     is_agg = ctx.get('is_aggregated_forecast', False)
 
-    # ── Top navy header bar ───────────────────────────────────────────────────
+    # ── Barra superior navy ───────────────────────────────────────────────────
     BAR_H = 2.8 * cm
     canvas.setFillColor(C_NAVY)
     canvas.rect(0, h - BAR_H, w, BAR_H, fill=1, stroke=0)
 
-    # Orange left accent inside the bar
+    # Acento naranja izquierdo dentro de la barra
     canvas.setFillColor(C_ORANGE)
     canvas.rect(0, h - BAR_H, 4 * mm, BAR_H, fill=1, stroke=0)
 
-    # System name (white in bar)
+    # Nombre del sistema (blanco en la barra)
     canvas.setFillColor(white)
     canvas.setFont('Helvetica-Bold', 15)
     canvas.drawString(1.2 * cm, h - 1.55 * cm, 'Sistema de Pronóstico de Criminalidad')
@@ -314,7 +314,7 @@ def _draw_cover(canvas, _doc, ctx: dict):
     canvas.setFont('Helvetica-Bold', 26)
     canvas.drawString(2.0 * cm, h - 5.6 * cm, canton)
 
-    # Orange underline below canton name
+    # Subrayado naranja bajo el nombre del cantón
     name_w = canvas.stringWidth(canton, 'Helvetica-Bold', 26)
     canvas.setStrokeColor(C_ORANGE)
     canvas.setLineWidth(2)
@@ -331,7 +331,7 @@ def _draw_cover(canvas, _doc, ctx: dict):
     n_periods    = len(hist_values)
     total_events = sum(hist_values)
 
-    # Period string derived from series list or historical_labels
+    # Cadena de período derivada de la lista de series o etiquetas históricas
     period_str = '—'
     if series:
         s0, s1 = series[0], series[-1]
@@ -421,7 +421,7 @@ def _draw_content_page(canvas, _doc, ctx: dict):
     canton = ctx.get('canton', '').title()
     delito = ctx.get('delito', '').title()
 
-    # ── Header ────────────────────────────────────────────────────────────────
+    # ── Encabezado ────────────────────────────────────────────────────────────────
     header_y = PAGE_H - 1.5 * cm
     canvas.setStrokeColor(C_BORDER)
     canvas.setLineWidth(0.5)
@@ -436,7 +436,7 @@ def _draw_content_page(canvas, _doc, ctx: dict):
     label = f'{canton} / {delito}'
     canvas.drawRightString(w - MARGIN_R, header_y, label)
 
-    # Orange accent line under header
+    # Línea de acento naranja debajo del encabezado
     canvas.setStrokeColor(C_ORANGE)
     canvas.setLineWidth(1.5)
     canvas.line(MARGIN_L, header_y - 0.35 * cm, MARGIN_L + 2.5 * cm, header_y - 0.35 * cm)
@@ -463,7 +463,7 @@ def _draw_content_page(canvas, _doc, ctx: dict):
 
 # ── Section builders ──────────────────────────────────────────────────────────
 def _section_heading(text: str, S: dict, accent_color=None) -> list:
-    """Return [bar, heading] — include in a KeepTogether at the call site."""
+    """Devuelve [barra, encabezado] — incluir en un KeepTogether en el lugar de llamada."""
     color = accent_color or C_NAVY
     bar = HRFlowable(width='100%', thickness=3, color=color, spaceBefore=14, spaceAfter=4)
     return [bar, Paragraph(text, S['h2'])]
@@ -471,8 +471,8 @@ def _section_heading(text: str, S: dict, accent_color=None) -> list:
 
 def _section_executive_summary(ctx: dict, S: dict) -> list:
     """
-    4 KPI cards + a concise text block summarising the key findings.
-    No filler text — every sentence derives from the actual data.
+    4 tarjetas KPI + un bloque de texto conciso que resume los hallazgos clave.
+    Sin texto de relleno — cada frase se deriva de los datos reales.
     """
     elems = _section_heading('Resumen ejecutivo', S, C_ORANGE)
 
@@ -480,8 +480,8 @@ def _section_executive_summary(ctx: dict, S: dict) -> list:
     hist_values  = ctx.get('historical_values', [])
     fore_values  = ctx.get('bottom_up_forecast', []) if is_agg else ctx.get('best_forecast', [])
     best_method  = ctx.get('best_method', '—')
-    best_mae     = ctx.get('best_mae')     # None for Bottom-Up
-    best_acc     = ctx.get('best_accuracy')  # None for Bottom-Up
+    best_mae     = ctx.get('best_mae')     # Ninguno para Bottom-Up
+    best_acc     = ctx.get('best_accuracy')  # Ninguno para Bottom-Up
     series       = ctx.get('series', [])
 
     # Derived statistics
@@ -492,7 +492,7 @@ def _section_executive_summary(ctx: dict, S: dict) -> list:
     fore_avg     = sum(fore_values) / len(fore_values) if fore_values else 0
     pct_change   = ((fore_avg - recent_avg) / recent_avg * 100) if recent_avg > 0 else 0
 
-    # Period string
+    # Cadena de período
     period_str = '—'
     if series:
         s0, s1 = series[0], series[-1]
@@ -599,7 +599,7 @@ def _section_executive_summary(ctx: dict, S: dict) -> list:
 
 
 def _section_parameters(ctx: dict, S: dict) -> list:
-    """Compact parameters table."""
+    """Tabla compacta de parámetros."""
     is_agg   = ctx.get('is_aggregated_forecast', False)
     canton   = ctx.get('canton', '—').title()
     delito   = ctx.get('delito', '—').title()
@@ -663,7 +663,7 @@ def _section_parameters(ctx: dict, S: dict) -> list:
 
 
 def _section_historical_forecast(ctx: dict, S: dict, chart_bytes) -> list:
-    """Chart + forecast table."""
+    """Gráfico + tabla de pronóstico."""
     hist_values = ctx.get('historical_values', [])
 
     note_para = None
@@ -749,7 +749,7 @@ def _section_historical_forecast(ctx: dict, S: dict, chart_bytes) -> list:
 
 
 def _section_metrics(ctx: dict, S: dict, chart_bytes) -> list:
-    """Model comparison: bar chart + detailed metrics table. Skipped for Bottom-Up."""
+    """Comparación de modelos: gráfico de barras + tabla detallada de métricas. Se omite para Bottom-Up."""
     metrics = ctx.get('metrics_comparison', [])
     if not metrics:
         return []
@@ -817,7 +817,7 @@ def _section_metrics(ctx: dict, S: dict, chart_bytes) -> list:
 
 
 def _section_breakdown(ctx: dict, S: dict) -> list:
-    """Per-crime-type breakdown table — only included for Bottom-Up reports."""
+    """Tabla de desglose por tipo de delito — solo se incluye en informes Bottom-Up."""
     breakdown = ctx.get('breakdown', [])
     if not breakdown:
         return []
@@ -877,7 +877,7 @@ def _section_breakdown(ctx: dict, S: dict) -> list:
 
 
 def _section_composition(ctx: dict, S: dict) -> list:
-    """Crime type breakdown — only included for 'all crimes' queries."""
+    """Desglose por tipo de delito — solo se incluye para consultas de 'todos los delitos'."""
     comp = ctx.get('composition_data', [])
     if not comp:
         return []
@@ -917,8 +917,8 @@ def _section_composition(ctx: dict, S: dict) -> list:
 
 def _section_conclusions(ctx: dict, S: dict) -> list:
     """
-    Data-driven conclusions: trend, methodology rationale, forecast summary, quality.
-    Adapts automatically for Bottom-Up vs. standard single-model reports.
+    Conclusiones basadas en datos: tendencia, razonamiento metodológico, resumen de pronóstico y calidad.
+    Se adapta automáticamente para informes Bottom-Up y para informes estándar de un solo modelo.
     """
     elems = _section_heading('Conclusiones y hallazgos', S)
 
@@ -1039,7 +1039,7 @@ def _section_conclusions(ctx: dict, S: dict) -> list:
             S['body'],
         ))
 
-    # ── 5. Interpretation from service ───────────────────────────────────────
+    # 5. Interpretación del servicio
     if interpretation:
         clean = (interpretation
                  .replace('<strong>', '<b>').replace('</strong>', '</b>')
@@ -1050,24 +1050,24 @@ def _section_conclusions(ctx: dict, S: dict) -> list:
     return elems
 
 
-# ── Main entry point ──────────────────────────────────────────────────────────
+# ── Punto de entrada principal ──────────────────────────────────────────────────────────
 def generate_forecast_pdf(context: dict) -> bytes:
     """
-    Generate a professional executive PDF report from forecasting results.
+    Genera un informe PDF ejecutivo profesional a partir de los resultados del pronóstico.
 
     Args:
-        context: dict returned by forecast_service.generate_forecast()
+        context: dict devuelto por forecast_service.generate_forecast()
 
     Returns:
-        PDF content as bytes.
+        Contenido PDF en bytes.
     """
     is_agg = context.get('is_aggregated_forecast', False)
 
-    # Normalise Bottom-Up context so all sections receive the keys they expect
+    # Normaliza el contexto Bottom-Up para que todas las secciones reciban las claves que esperan
     if is_agg:
         context = _normalize_bottom_up_for_pdf(context)
 
-    # ── Pre-render matplotlib charts ──────────────────────────────────────────
+    # ── Pre-renderizar los gráficos de matplotlib ───────────────────────────────
     chart_series = None
     chart_mae    = None
     try:
@@ -1079,7 +1079,7 @@ def generate_forecast_pdf(context: dict) -> bytes:
     except Exception as exc:
         logger.warning('Chart MAE failed: %s', exc)
 
-    # ── Document setup ────────────────────────────────────────────────────────
+    # ── Configuración del documento ───────────────────────────────────────────
     buffer = io.BytesIO()
     canton = context.get('canton', '').title()
     delito = context.get('delito', '').title()
@@ -1098,37 +1098,37 @@ def generate_forecast_pdf(context: dict) -> bytes:
 
     S = _styles()
 
-    # ── Story assembly ────────────────────────────────────────────────────────
+    # ── Ensamblado de la historia ─────────────────────────────────────────────
     story = []
 
-    # Page 1 is the cover — drawn entirely via canvas callback.
+    # La página 1 es la portada — se dibuja completamente mediante callback de canvas.
     story.append(PageBreak())
 
-    # Executive summary
+    # Resumen ejecutivo
     story.extend(_section_executive_summary(context, S))
     story.append(Spacer(1, 8))
 
-    # Parameters
+    # Parámetros
     story.extend(_section_parameters(context, S))
     story.append(Spacer(1, 8))
 
-    # Historical + forecast chart and table
+    # Gráfico histórico + tabla de pronóstico
     story.extend(_section_historical_forecast(context, S, chart_series))
 
     if is_agg:
-        # Bottom-Up: per-type breakdown replaces model comparison
+        # Bottom-Up: el desglose por tipo reemplaza la comparación de modelos
         story.extend(_section_breakdown(context, S))
     else:
-        # Standard: four-model comparison
+        # Estándar: comparación de cuatro modelos
         story.extend(_section_metrics(context, S, chart_mae))
 
-    # Crime composition (for both all-crimes modes)
+    # Composición de delitos (para ambos modos de todos los delitos)
     story.extend(_section_composition(context, S))
 
-    # Conclusions
+    # Conclusiones
     story.extend(_section_conclusions(context, S))
 
-    # ── Build ─────────────────────────────────────────────────────────────────
+    # ── Generar documento ───────────────────────────────────────────────────────
     doc.build(
         story,
         onFirstPage=lambda c, d: _draw_cover(c, d, context),

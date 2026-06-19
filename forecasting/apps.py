@@ -6,8 +6,8 @@ from django.apps import AppConfig
 
 logger = logging.getLogger(__name__)
 
-# Management commands where auto-import should not run.
-# These commands either don't need data or run before tables exist.
+# Comandos de gestión donde no debe ejecutarse auto-import.
+# Estos comandos no necesitan datos o se ejecutan antes de que existan las tablas.
 _SKIP_AUTO_IMPORT = {
     'migrate', 'makemigrations', 'sqlmigrate', 'showmigrations',
     'collectstatic', 'test', 'shell', 'dbshell', 'createsuperuser',
@@ -23,13 +23,13 @@ class ForecastingConfig(AppConfig):
     def ready(self):
         argv = sys.argv
 
-        # Skip for management commands that don't serve web requests
+        # Omitir para comandos de gestión que no sirven solicitudes web
         if len(argv) > 1 and argv[1] in _SKIP_AUTO_IMPORT:
             return
 
-        # Django's dev server uses an auto-reloader that starts the process
-        # twice: first the reloader parent, then the child (RUN_MAIN=true).
-        # Run auto-import only in the child to avoid duplicate imports.
+        # El servidor de desarrollo de Django usa un auto-reloader que inicia
+        # el proceso dos veces: primero el padre y luego el hijo (RUN_MAIN=true).
+        # Ejecutar auto-import solo en el proceso hijo para evitar importaciones duplicadas.
         if len(argv) > 1 and argv[1] == 'runserver':
             if os.environ.get('RUN_MAIN') != 'true':
                 return

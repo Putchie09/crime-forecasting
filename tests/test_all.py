@@ -1,11 +1,11 @@
 """
-Unit tests for the Crime Forecasting application.
+Pruebas unitarias para la aplicación de Pronóstico de Criminalidad.
 
-Covers:
-  - Data loading and cleaning
-  - All four forecasting methods
-  - Service orchestration
-  - Model evaluation metrics
+Cubre:
+  - Carga y limpieza de datos
+  - Los cuatro métodos de pronóstico
+  - Orquestación de servicios
+  - Métricas de evaluación del modelo
 """
 
 import math
@@ -14,18 +14,18 @@ from django.urls import reverse
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Tests for forecasting methods
+#  Pruebas para los métodos de pronóstico
 # ─────────────────────────────────────────────────────────────────
 
 class TrendMethodTests(TestCase):
-    """Tests for the linear trend forecasting method."""
+    """Pruebas para el método de pronóstico de tendencia lineal."""
 
     def setUp(self):
         from forecasting.forecasting_methods import trend
         self.trend = trend
 
     def test_basic_fit(self):
-        """Linear trend should produce fitted values and forecast."""
+        """La tendencia lineal debe producir valores ajustados y pronósticos."""
         values = [10, 12, 14, 16, 18, 20, 22, 24]
         result = self.trend.fit_and_forecast(values, n_forecast=3)
         self.assertIn('fitted', result)
@@ -34,13 +34,13 @@ class TrendMethodTests(TestCase):
         self.assertEqual(len(result['forecast']), 3)
 
     def test_perfect_linear_series(self):
-        """For a perfect linear series, fitted values should nearly match actual."""
+        """Para una serie lineal perfecta, los valores ajustados deben coincidir casi con los reales."""
         values = [float(i * 5) for i in range(1, 13)]
         result = self.trend.fit_and_forecast(values, n_forecast=6)
         self.assertAlmostEqual(result['mae'], 0.0, places=5)
 
     def test_forecast_monotone_increase(self):
-        """Upward trend series should project increasing forecasts."""
+        """Una serie con tendencia ascendente debe proyectar pronósticos crecientes."""
         values = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65]
         result = self.trend.fit_and_forecast(values, n_forecast=3)
         f = result['forecast']
@@ -48,27 +48,27 @@ class TrendMethodTests(TestCase):
         self.assertGreater(f[2], f[1])
 
     def test_no_negative_forecasts(self):
-        """Forecast values should never be negative."""
+        """Los valores pronosticados nunca deben ser negativos."""
         values = [100, 80, 60, 40, 20, 10, 5, 3, 2, 1, 1, 1]
         result = self.trend.fit_and_forecast(values, n_forecast=6)
         for v in result['forecast']:
             self.assertGreaterEqual(v, 0)
 
     def test_metrics_present(self):
-        """Result must include all required metric keys."""
+        """El resultado debe incluir todas las claves métricas requeridas."""
         values = list(range(10, 22))
         result = self.trend.fit_and_forecast(values, n_forecast=3)
         for key in ('mae', 'mse', 'rmse', 'accuracy'):
             self.assertIn(key, result)
 
     def test_minimum_data_validation(self):
-        """Should raise ValueError with fewer than 2 data points."""
+        """Debe lanzar ValueError con menos de 2 puntos de datos."""
         with self.assertRaises(ValueError):
             self.trend.fit_and_forecast([42], n_forecast=3)
 
 
 class ExponentialSmoothingTests(TestCase):
-    """Tests for the exponential smoothing method."""
+    """Pruebas para el método de suavizamiento exponencial."""
 
     def setUp(self):
         from forecasting.forecasting_methods import exponential_smoothing
@@ -88,7 +88,7 @@ class ExponentialSmoothingTests(TestCase):
         self.assertLess(alpha, 1.0)
 
     def test_constant_series_flat_forecast(self):
-        """For a constant series, all forecast values should be that constant."""
+        """Para una serie constante, todos los valores pronosticados deben ser ese mismo constante."""
         values = [50.0] * 10
         result = self.es.fit_and_forecast(values, n_forecast=6)
         for v in result['forecast']:
@@ -106,14 +106,14 @@ class ExponentialSmoothingTests(TestCase):
 
 
 class SeasonalIndexTests(TestCase):
-    """Tests for the seasonal index method."""
+    """Pruebas para el método de índice estacional."""
 
     def setUp(self):
         from forecasting.forecasting_methods import seasonal_index
         self.si = seasonal_index
 
     def _seasonal_values(self, years=2):
-        """Generate a 2-year series with clear seasonality."""
+        """Genera una serie de 2 años con estacionalidad clara."""
         base = [10, 8, 12, 15, 18, 20, 25, 22, 18, 14, 10, 8]
         return base * years
 
@@ -141,7 +141,7 @@ class SeasonalIndexTests(TestCase):
 
 
 class MultiplicativeDecompositionTests(TestCase):
-    """Tests for the multiplicative decomposition method."""
+    """Pruebas para el método de descomposición multiplicativa."""
 
     def setUp(self):
         from forecasting.forecasting_methods import multiplicative_decomposition
@@ -158,7 +158,7 @@ class MultiplicativeDecompositionTests(TestCase):
         self.assertEqual(len(result['forecast']), 6)
 
     def test_seasonal_indices_normalize(self):
-        """Seasonal indices should sum approximately to 12."""
+        """Los índices estacionales deben sumar aproximadamente 12."""
         values = self._seasonal_values(3)
         result = self.md.fit_and_forecast(values, n_forecast=3, start_year=2021, start_month=1)
         indices = result['params']['seasonal_indices']
@@ -176,14 +176,14 @@ class MultiplicativeDecompositionTests(TestCase):
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Tests for data service
+#  Pruebas para el servicio de datos
 # ─────────────────────────────────────────────────────────────────
 
 class DataServiceTests(TestCase):
-    """Tests for the data loading and processing service."""
+    """Pruebas para el servicio de carga y procesamiento de datos."""
 
     def test_normalize_columns_uppercase(self):
-        """Uppercase column names should be normalized."""
+        """Los nombres de columnas en mayúsculas deben normalizarse."""
         import pandas as pd
         from forecasting.services.data_service import normalize_columns
         df = pd.DataFrame({'DELITO': ['A'], 'FECHA': ['2023-01-01'], 'CANTON': ['B']})
@@ -193,7 +193,7 @@ class DataServiceTests(TestCase):
         self.assertIn('Canton', df_norm.columns)
 
     def test_clean_dataset_drops_missing_dates(self):
-        """Rows with invalid dates should be removed."""
+        """Las filas con fechas inválidas deben eliminarse."""
         import pandas as pd
         from forecasting.services.data_service import clean_dataset
         df = pd.DataFrame({
@@ -206,7 +206,7 @@ class DataServiceTests(TestCase):
         self.assertEqual(len(result_df), 1)
 
     def test_build_monthly_series_aggregation(self):
-        """Monthly series should aggregate counts correctly."""
+        """La serie mensual debe agregar los conteos correctamente."""
         import pandas as pd
         from forecasting.services.data_service import build_monthly_series
         df = pd.DataFrame({
@@ -221,11 +221,11 @@ class DataServiceTests(TestCase):
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Tests for views
+#  Pruebas para las vistas
 # ─────────────────────────────────────────────────────────────────
 
 class HomeViewTests(TestCase):
-    """Tests for the home page view."""
+    """Pruebas para la vista de la página principal."""
 
     def test_home_returns_200(self):
         response = self.client.get(reverse('forecasting:home'))
@@ -244,14 +244,14 @@ class HomeViewTests(TestCase):
 
 
 class ForecastViewTests(TestCase):
-    """Tests for the forecast view."""
+    """Pruebas para la vista de pronóstico."""
 
     def test_forecast_get_returns_200(self):
         response = self.client.get(reverse('forecasting:forecast'))
         self.assertEqual(response.status_code, 200)
 
     def test_forecast_post_missing_canton(self):
-        """Posting without canton should return form errors."""
+        """Enviar sin canton debe devolver errores de formulario."""
         response = self.client.post(reverse('forecasting:forecast'), {
             'canton': '',
             'delito': 'ASALTO',
@@ -261,7 +261,7 @@ class ForecastViewTests(TestCase):
         self.assertIn('form_errors', response.context)
 
     def test_forecast_post_with_no_data(self):
-        """Posting with valid params but empty DB should show error message."""
+        """Enviar con parámetros válidos pero base de datos vacía debe mostrar mensaje de error."""
         response = self.client.post(reverse('forecasting:forecast'), {
             'canton': 'ALAJUELA',
             'delito': 'ASALTO',
@@ -274,7 +274,7 @@ class ForecastViewTests(TestCase):
 
 
 class HistoricalViewTests(TestCase):
-    """Tests for the historical data view."""
+    """Pruebas para la vista de datos históricos."""
 
     def test_historical_returns_200(self):
         response = self.client.get(reverse('forecasting:historical'))
@@ -291,7 +291,7 @@ class HistoricalViewTests(TestCase):
 
 
 class ExportCSVViewTests(TestCase):
-    """Tests for the CSV export view."""
+    """Pruebas para la vista de exportación CSV."""
 
     def test_csv_export_returns_200(self):
         response = self.client.get(reverse('forecasting:export_csv'))

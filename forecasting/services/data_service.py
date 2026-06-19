@@ -1,8 +1,8 @@
 """
-Data loading and processing service.
+Servicio de carga y procesamiento de datos.
 
-Reads the OIJ Excel/CSV dataset, validates, cleans, normalizes,
-and builds the aggregated monthly time series stored in the database.
+Lee el dataset de OIJ en Excel/CSV, valida, limpia, normaliza y construye
+la serie temporal mensual agregada que se almacena en la base de datos.
 """
 
 import logging
@@ -20,7 +20,7 @@ REQUIRED_COLUMNS = {
     'Nacionalidad', 'Provincia', 'Canton', 'Distrito',
 }
 
-# Possible alternative column name spellings in real OIJ exports
+# Posibles variantes de nombres de columnas en exportaciones reales del OIJ
 COLUMN_ALIASES = {
     'DELITO': 'Delito',
     'SUBDELITO': 'SubDelito',
@@ -60,9 +60,9 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_dataset(path: Path = None) -> tuple[pd.DataFrame, list]:
     """
-    Load dataset from Excel or CSV.
-    Returns (clean_df, audit_report) where audit_report is a list of dicts
-    describing each cleaning step and its row impact.
+    Carga el dataset desde Excel o CSV.
+    Devuelve (clean_df, audit_report), donde audit_report es una lista de
+    diccionarios que describen cada paso de limpieza y su impacto en filas.
     """
     if path is None:
         path = settings.DATASET_PATH
@@ -101,10 +101,10 @@ def load_dataset(path: Path = None) -> tuple[pd.DataFrame, list]:
 
 def _read_excel_all_sheets(path: Path) -> pd.DataFrame:
     """
-    Read all sheets from an Excel file and concatenate them.
+    Lee todas las hojas de un archivo Excel y las concatena.
 
-    Logs a sheet-by-sheet breakdown so it's visible if rows are split across
-    multiple sheets (a common OIJ Excel format pattern).
+    Registra un desglose hoja por hoja para que sea visible si las filas
+    están repartidas en varias hojas (patrón común en el formato OIJ).
     """
     all_sheets = pd.read_excel(path, dtype=str, sheet_name=None)
 
@@ -124,7 +124,7 @@ def _read_excel_all_sheets(path: Path) -> pd.DataFrame:
     if len(frames) == 1:
         return frames[0].reset_index(drop=True)
 
-    # Multiple sheets: concatenate only sheets that share the same columns as the first
+    # Varias hojas: concatena solo las que comparten las mismas columnas que la primera
     reference_cols = set(frames[0].columns)
     compatible = [frames[0]]
     skipped = []
@@ -146,16 +146,16 @@ def _read_excel_all_sheets(path: Path) -> pd.DataFrame:
 
 def clean_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
     """
-    Clean and normalize the dataset.
+    Limpia y normaliza el dataset.
 
-    Cleaning strategy: only discard records that make it impossible to build
-    the time series (invalid date, missing canton, missing crime type).
-    All secondary fields (Hora, Sexo, Edad, Victima, etc.) are kept as-is
-    and stored as NULL when absent — they are never grounds for row elimination.
+    Estrategia de limpieza: solo descartar registros que hagan imposible
+    construir la serie temporal (fecha inválida, cantón ausente, tipo de delito ausente).
+    Todos los campos secundarios (Hora, Sexo, Edad, Victima, etc.) se conservan
+    tal cual y se almacenan como NULL cuando faltan — nunca son motivo de eliminación.
 
-    Returns:
+    Devuelve:
         (cleaned_df, audit_report)
-        audit_report: list of dicts with keys:
+        audit_report: lista de diccionarios con claves:
             rule, justification, before, after, dropped, pct, classification
     """
     initial = len(df)
@@ -275,7 +275,7 @@ def clean_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
 
 def _step(rule: str, justification: str, classification: str,
           before: int, after: int, initial: int) -> dict:
-    """Build one audit step dict."""
+    """Construye un diccionario para un paso de auditoría."""
     dropped = before - after
     pct_of_step = dropped / before * 100 if before else 0
     pct_of_total = dropped / initial * 100 if initial else 0
@@ -297,9 +297,9 @@ def _step(rule: str, justification: str, classification: str,
 
 def build_monthly_series(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Aggregate cleaned data into monthly time series.
+    Agrega los datos limpios en series temporales mensuales.
 
-    Returns DataFrame with columns:
+    Devuelve un DataFrame con columnas:
         year, month, canton, delito, total_delitos
     """
     if df.empty:
@@ -323,20 +323,20 @@ def build_monthly_series(df: pd.DataFrame) -> pd.DataFrame:
 @transaction.atomic
 def import_to_database(df: pd.DataFrame, series: pd.DataFrame) -> dict:
     """
-    Persist cleaned records and monthly series to the database.
-    Clears existing data before importing (full refresh strategy).
+    Persiste los registros limpios y la serie mensual en la base de datos.
+    Borra los datos existentes antes de importar (estrategia de actualización completa).
 
-    Returns a summary dict with counts.
+    Devuelve un diccionario resumen con los conteos.
     """
     from forecasting.models import CrimeRecord, MonthlySeries
 
     logger.info("Starting database import...")
 
-    # Clear existing data
+    # Elimina los datos existentes
     CrimeRecord.objects.all().delete()
     MonthlySeries.objects.all().delete()
 
-    # Bulk insert crime records
+    # Inserta en bloque los registros de delitos
     records = []
     for _, row in df.iterrows():
         records.append(CrimeRecord(
@@ -357,7 +357,7 @@ def import_to_database(df: pd.DataFrame, series: pd.DataFrame) -> dict:
     CrimeRecord.objects.bulk_create(records, batch_size=500)
     logger.info(f"Inserted {len(records)} crime records")
 
-    # Bulk insert monthly series
+    # Inserta en bloque la serie mensual
     monthly_records = []
     for _, row in series.iterrows():
         monthly_records.append(MonthlySeries(
@@ -379,12 +379,12 @@ def import_to_database(df: pd.DataFrame, series: pd.DataFrame) -> dict:
 
 def get_global_series_range() -> dict | None:
     """
-    Return the global (min_year, min_month, max_year, max_month) from MonthlySeries.
+    Devuelve el rango global (min_year, min_month, max_year, max_month) de MonthlySeries.
 
-    Uses two-step aggregation to avoid the independent-Max pitfall: getting
-    Max('year') and Max('month') separately can return a (year, month) pair
-    that never existed in the data (e.g. max_year=2025, max_month=12 from a
-    different year).  We always pin the month query to the correct year.
+    Usa una agregación en dos pasos para evitar el error de Max independiente:
+    obtener Max('year') y Max('month') por separado puede devolver una pareja
+    (año, mes) que nunca existió en los datos (p.ej. max_year=2025, max_month=12
+    de un año distinto). Siempre fijamos la consulta de mes al año correcto.
     """
     from django.db.models import Max, Min
     from forecasting.models import MonthlySeries
@@ -410,7 +410,7 @@ def get_global_series_range() -> dict | None:
 
 
 def get_dataset_summary() -> dict:
-    """Return summary statistics for the home page KPI cards."""
+    """Devuelve estadísticas resumidas para las tarjetas KPI de la página de inicio."""
     from forecasting.models import CrimeRecord, MonthlySeries
 
     total_records = CrimeRecord.objects.count()

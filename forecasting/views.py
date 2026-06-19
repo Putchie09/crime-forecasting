@@ -1,13 +1,13 @@
 """
-Views for the Crime Forecasting application.
+Vistas para la aplicación de Pronóstico de Criminalidad.
 
-Three main modules:
-  1. HomeView       – Overview, KPI cards, methodology cards
-  2. ForecastView   – Forecast form + results (AJAX-driven)
-  3. HistoricalView – Paginated, filterable data explorer
-  4. ExportPDFView  – Generate and stream PDF report
-  5. ExportCSVView  – Export filtered data as CSV
-  6. APIViews       – JSON endpoints for Chart.js
+Tres módulos principales:
+  1. HomeView       – Vista general, tarjetas KPI, tarjetas metodológicas
+  2. ForecastView   – Formulario de pronóstico + resultados (AJAX)
+  3. HistoricalView – Explorador de datos paginado y filtrable
+  4. ExportPDFView  – Generar y transmitir reporte PDF
+  5. ExportCSVView  – Exportar datos filtrados como CSV
+  6. APIViews       – Endpoints JSON para Chart.js
 """
 
 import csv
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_dataset_period() -> str | None:
-    """Return a human-readable string of the global series date range."""
+    """Devuelve una cadena legible con el rango de fechas de la serie global."""
     gr = get_global_series_range()
     if not gr:
         return None
@@ -58,7 +58,7 @@ class HomeView(View):
     def get(self, request):
         summary = get_dataset_summary()
 
-        # Build aggregated monthly series for the overview chart (all cantons)
+        # Construye la serie mensual agregada para el gráfico de vista general (todos los cantones)
         chart_data = _build_overview_chart()
 
         context = {
@@ -70,7 +70,7 @@ class HomeView(View):
 
 
 def _build_overview_chart():
-    """Aggregate all monthly records into a single province-wide time series."""
+    """Agrega todos los registros mensuales en una sola serie para la provincia."""
     from django.db.models import Sum
 
     qs = (
@@ -113,12 +113,12 @@ class ForecastView(View):
             'dataset_period': _get_dataset_period(),
         }
 
-        # Parse form inputs
+        # Analiza los datos del formulario
         canton = request.POST.get('canton', '').strip().upper()
         delito = request.POST.get('delito', '').strip().upper()
         n_months_str = request.POST.get('n_months', '6').strip()
 
-        # Validate
+        # Validar
         errors = []
         if not canton:
             errors.append('Debe seleccionar un cantón.')
@@ -135,14 +135,14 @@ class ForecastView(View):
             context['form_data'] = request.POST
             return render(request, self.template_name, context)
 
-        # Run forecast using the full historical series (no date truncation)
+        # Ejecuta el pronóstico usando la serie histórica completa (sin truncar fechas)
         results = generate_forecast(canton, delito, n_months)
 
         context.update(results)
         context['form_data'] = request.POST
         context['showed_results'] = True
 
-        # Serialize chart data for JavaScript
+        # Serializa los datos del gráfico para JavaScript
         if results.get('success'):
             context['js_historical_labels'] = json.dumps(results['historical_labels'])
             context['js_historical_values'] = json.dumps(results['historical_values'])
@@ -171,7 +171,7 @@ class HistoricalView(View):
     def get(self, request):
         summary = get_dataset_summary()
 
-        # Filter parameters
+        # Parámetros de filtro
         q = request.GET.get('q', '').strip()
         canton = request.GET.get('canton', '').strip().upper()
         delito = request.GET.get('delito', '').strip().upper()
@@ -181,7 +181,7 @@ class HistoricalView(View):
 
         qs = CrimeRecord.objects.all().order_by('-fecha', 'canton')
 
-        # Apply filters
+        # Aplicar filtros
         if q:
             qs = qs.filter(
                 Q(delito__icontains=q) |
@@ -217,7 +217,7 @@ class HistoricalView(View):
         except (PageNotAnInteger, EmptyPage):
             page_obj = paginator.page(1)
 
-        # Build page range for template
+        # Rango de página de construcción para plantilla
         current = page_obj.number
         total_pages = paginator.num_pages
         page_range = _build_page_range(current, total_pages)
@@ -229,7 +229,7 @@ class HistoricalView(View):
             'page_range': page_range,
             'cantons': summary['cantons'],
             'delitos': summary['delitos'],
-            # Filter values to repopulate form
+            # Valores de filtro para repoblar formulario
             'filter_q': q,
             'filter_canton': canton,
             'filter_delito': delito,
@@ -241,7 +241,7 @@ class HistoricalView(View):
 
 
 def _build_page_range(current: int, total: int, window: int = 5):
-    """Return a list of page numbers centered around current page."""
+    """Devuelve una lista de números de página centrada en la página actual."""
     half = window // 2
     start = max(1, current - half)
     end = min(total, current + half)
@@ -255,15 +255,15 @@ def _build_page_range(current: int, total: int, window: int = 5):
 
 
 # ─────────────────────────────────────────────────────────────
-#  EXPORT PDF
+#  EXPORTAR PDF
 # ─────────────────────────────────────────────────────────────
 
 class ExportPDFView(View):
 
     def post(self, request):
         """
-        Regenerate forecast and stream as PDF.
-        Uses the same POST parameters as ForecastView.
+        Regenera el pronóstico y lo transmite como PDF.
+        Usa los mismos parámetros POST que ForecastView.
         """
         canton = request.POST.get('canton', '').strip().upper()
         delito = request.POST.get('delito', '').strip().upper()
@@ -307,7 +307,7 @@ class ExportPDFView(View):
 class ExportCSVView(View):
 
     def get(self, request):
-        """Export filtered crime records as CSV."""
+        """Exporta registros de delitos filtrados como CSV."""
         q = request.GET.get('q', '').strip()
         canton = request.GET.get('canton', '').strip().upper()
         delito = request.GET.get('delito', '').strip().upper()
@@ -364,13 +364,13 @@ class ExportCSVView(View):
 # ─────────────────────────────────────────────────────────────
 
 def api_overview_chart(request):
-    """Return province-wide monthly totals for the home chart."""
+    """Devuelve totales mensuales de toda la provincia para el gráfico de inicio."""
     data = _build_overview_chart()
     return JsonResponse(data)
 
 
 def api_time_series(request):
-    """Return time series for a canton/delito combo (used in Forecast page)."""
+    """Devuelve la serie temporal para un combo canton/delito (usado en la página de Pronóstico)."""
     canton = request.GET.get('canton', '').upper()
     delito = request.GET.get('delito', '').upper()
     if not canton or not delito:

@@ -1,40 +1,39 @@
 """
 Descomposición Multiplicativa (Multiplicative Decomposition).
 
-Decomposes the time series into three components:
+Descompone la serie de tiempo en tres componentes:
     Y(t) = T(t) × S(t) × I(t)
-  where:
-    T(t) = Trend component (linear regression on centered moving average)
-    S(t) = Seasonal component (monthly indices from de-trended series)
-    I(t) = Irregular / residual component
+  donde:
+    T(t) = componente de tendencia (regresión lineal sobre promedio móvil centrado)
+    S(t) = componente estacional (índices mensuales de la serie sin tendencia)
+    I(t) = componente irregular / residual
 
-Forecast: Ŷ(t) = T(t) × S(t)
+Pronóstico: Ŷ(t) = T(t) × S(t)
 
-This method captures both trend and seasonality simultaneously,
-producing more precise forecasts for series with strong patterns.
+Este método captura simultáneamente tendencia y estacionalidad,
+produciendo pronósticos más precisos para series con patrones fuertes.
 """
-
 import numpy as np
 from typing import List
 
 
 def _centered_moving_average(y: np.ndarray, period: int = 12) -> np.ndarray:
     """
-    Compute centered moving average.
-    For even period (12 months): uses the 2×MA approach — average two consecutive
-    period-length MAs for proper centering (standard textbook method).
-    For odd period: simple symmetric window.
+    Calcula el promedio móvil centrado.
+    Para períodos pares (12 meses): usa el método 2×MA — promedio de dos MAs
+    consecutivos para un centrado correcto.
+    Para períodos impares: usa una ventana simétrica sencilla.
     """
     n = len(y)
     cma = np.full(n, np.nan)
     half = period // 2
 
     if period % 2 == 0:
-        # Step 1: compute period-length moving averages
+        # Paso 1: calcula promedios móviles de longitud igual al período
         ma = np.full(n, np.nan)
         for i in range(n - period + 1):
             ma[i] = np.mean(y[i:i + period])
-        # Step 2: center by averaging two consecutive MAs (2×MA)
+        # Paso 2: centra promediando dos MAs consecutivos (2×MA)
         for i in range(n - period):
             cma[i + half] = (ma[i] + ma[i + 1]) / 2
     else:
@@ -51,16 +50,16 @@ def fit_and_forecast(
     start_month: int,
 ) -> dict:
     """
-    Fit a multiplicative decomposition model and generate forecasts.
+    Ajusta un modelo de descomposición multiplicativa y genera pronósticos.
 
     Args:
-        values: Historical monthly time series values.
-        n_forecast: Number of future periods to forecast.
-        start_year: Year of the first observation.
-        start_month: Month of the first observation (1–12).
+        values: Valores históricos mensuales de la serie de tiempo.
+        n_forecast: Cantidad de períodos futuros a pronosticar.
+        start_year: Año de la primera observación.
+        start_month: Mes de la primera observación (1–12).
 
     Returns:
-        dict with fitted values, forecasts, metrics, and seasonal components.
+        dict con valores ajustados, pronósticos, métricas y componentes estacionales.
     """
     n = len(values)
     if n < 12:
@@ -68,16 +67,16 @@ def fit_and_forecast(
 
     y = np.array(values, dtype=float)
 
-    # Replace zeros to avoid division issues (add small epsilon)
+    # Reemplaza ceros para evitar divisiones inválidas (agrega un pequeño epsilon)
     y_safe = np.where(y == 0, 0.01, y)
 
-    # Step 1: Centered Moving Average (trend estimate)
+    # Paso 1: Promedio móvil centrado (estimación de tendencia)
     cma = _centered_moving_average(y_safe, period=12)
 
-    # Step 2: Seasonal-Irregular ratios
+    # Paso 2: razones estacional-irregular
     si_ratios = y_safe / np.where(np.isnan(cma), 1.0, cma)
 
-    # Step 3: Monthly seasonal indices (median of SI ratios for each month)
+    # Paso 3: índices estacionales mensuales (mediana de ratios SI por mes)
     months = []
     yr, mo = start_year, start_month
     for _ in range(n):
@@ -97,18 +96,18 @@ def fit_and_forecast(
         else:
             seasonal_indices[m] = 1.0
 
-    # Normalize so indices sum to 12 (monthly data)
+    # Normaliza para que los índices sumen 12 (datos mensuales)
     si_sum = sum(seasonal_indices.values())
     if si_sum > 0:
         for m in seasonal_indices:
             seasonal_indices[m] *= 12.0 / si_sum
 
-    # Step 4: De-seasonalize
+    # Paso 4: Desestacionaliza
     si_array = np.array([seasonal_indices[m] for m in months])
     si_array = np.where(si_array == 0, 1.0, si_array)
     y_deseason = y_safe / si_array
 
-    # Step 5: Fit linear trend to de-seasonalized series
+    # Paso 5: Ajusta tendencia lineal a la serie desestacionalizada
     t = np.arange(1, n + 1, dtype=float)
     t_mean = t.mean()
     yd_mean = y_deseason.mean()
@@ -117,13 +116,13 @@ def fit_and_forecast(
 
     trend_vals = a + b * t
 
-    # Step 6: Fitted = Trend × Seasonal
+    # Paso 6: Ajustado = Tendencia × Estacionalidad
     fitted = trend_vals * si_array
-    # Restore original zero positions
+    # Restaura posiciones originales de cero
     fitted = np.where(y == 0, 0.0, fitted)
     fitted = np.maximum(fitted, 0)
 
-    # Step 7: Forecast future periods
+    # Paso 7: Pronostica períodos futuros
     forecast = []
     future_months = []
     yr_f, mo_f = yr, mo
@@ -139,7 +138,7 @@ def fit_and_forecast(
 
     forecast = np.array(forecast)
 
-    # Metrics (use original y, not y_safe)
+    # Métricas (usa y original, no y_safe)
     errors = np.abs(y - fitted)
     mae = float(np.mean(errors))
     mse = float(np.mean((y - fitted) ** 2))

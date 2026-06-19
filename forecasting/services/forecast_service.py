@@ -1,9 +1,9 @@
 """
-Forecasting Service – orchestrates all quantitative models.
+Servicio de Pronóstico – orquesta todos los modelos cuantitativos.
 
-Retrieves the monthly time series from the database,
-runs all four forecasting methods, compares their performance,
-and returns a structured results dictionary for the views.
+Recupera la serie temporal mensual desde la base de datos,
+Ejecuta los cuatro métodos de pronóstico, compara su desempeño
+y devuelve un diccionario de resultados estructurado para las vistas.
 """
 
 import logging
@@ -36,26 +36,26 @@ MONTH_NAMES_FULL_ES = {
     9: 'Setiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
 }
 
-# ── Volume-based series classification thresholds ────────────────────────────
-# Mean monthly crimes that determine which model is applied per crime type.
-FREQ_LOW_THRESHOLD = 1.0     # mean < 1   → low frequency  (Linear Trend or mean)
-FREQ_MEDIUM_THRESHOLD = 5.0  # 1 ≤ mean < 5 → medium freq  (SES)
-                             # mean ≥ 5   → high frequency (all 4 models, best by MAE)
+# ── Umbrales de clasificación según volumen de la serie ────────────────────
+# Promedio mensual de delitos que determina qué modelo se aplica por tipo de delito.
+FREQ_LOW_THRESHOLD = 1.0     # mean < 1   → baja frecuencia  (Tendencia Lineal o promedio)
+FREQ_MEDIUM_THRESHOLD = 5.0  # 1 ≤ mean < 5 → frecuencia media  (SES)
+                             # mean ≥ 5   → alta frecuencia (todos los 4 modelos, mejor por MAE)
 
 
 def _add_months(year: int, month: int, delta: int):
-    """Add delta months to (year, month), returning (new_year, new_month)."""
+    """Suma delta meses a (año, mes) y devuelve (nuevo_año, nuevo_mes)."""
     total_months = (year - 1) * 12 + (month - 1) + delta
     return (total_months // 12 + 1, total_months % 12 + 1)
 
 
 def _get_all_delitos_series(canton: str) -> list:
     """
-    Build a zero-filled monthly series summing all crime types for the canton.
+    Construye una serie mensual rellena con ceros que suma todos los tipos de delito para el cantón.
 
-    The series extends from the canton's first crime month to the global dataset
-    end (not just the canton's last crime month), ensuring trailing zeros are
-    included for months where no crimes were recorded.
+    La serie se extiende desde el primer mes con delitos del cantón hasta el
+    final del conjunto de datos global (no solo hasta el último mes con delitos del cantón),
+    asegurando que los ceros finales estén incluidos para los meses sin registros.
     """
     from django.db.models import Sum
 
@@ -98,7 +98,7 @@ def _get_all_delitos_series(canton: str) -> list:
 
 
 def _compute_delito_composition(canton: str) -> list:
-    """Return list of {delito, total, pct} dicts for the canton, sorted by total desc."""
+    """Devuelve lista de diccionarios {delito, total, pct} para el cantón, ordenada por total descendente."""
     from django.db.models import Sum
 
     qs = (
@@ -126,14 +126,14 @@ def _compute_delito_composition(canton: str) -> list:
 
 def get_time_series(canton: str, delito: str) -> list:
     """
-    Query MonthlySeries for a specific canton and crime type.
-    Returns list of dicts: {year, month, total_delitos, label}.
+    Consulta MonthlySeries para un cantón y tipo de delito específicos.
+    Devuelve una lista de diccionarios: {year, month, total_delitos, label}.
 
-    Zero-fills every calendar month from the first event for this
-    canton/delito group to the global dataset end — not just to the
-    last event.  This ensures the series includes trailing zero months
-    (e.g. if no crime of this type occurred in the final 18 months of
-    the dataset) so models are not trained on a falsely optimistic endpoint.
+    Rellena con ceros cada mes calendario desde el primer evento de este
+    grupo canton/delito hasta el final del conjunto de datos global — no solo
+    hasta el último evento. Esto asegura que la serie incluya meses cero finales
+    (p.ej. si no ocurrió ningún delito de este tipo en los últimos 18 meses)
+    para que los modelos no entrenen con un punto final erróneamente optimista.
     """
     if delito.upper() == ALL_DELITOS_TOKEN:
         return _get_all_delitos_series(canton)
@@ -192,7 +192,7 @@ def get_time_series(canton: str, delito: str) -> list:
 # ── Bottom-Up helpers ─────────────────────────────────────────────────────────
 
 def _get_crime_types_for_canton(canton: str) -> list:
-    """Return sorted list of distinct crime type strings for the canton (or all province)."""
+    """Devuelve la lista ordenada de tipos de delito distintos para el cantón (o toda la provincia)."""
     if canton.upper() == ALL_CANTONS_TOKEN:
         return list(
             MonthlySeries.objects.exclude(canton='DESCONOCIDO')
@@ -209,7 +209,7 @@ def _get_crime_types_for_canton(canton: str) -> list:
 
 
 def _classify_series(mean_monthly: float) -> str:
-    """Classify a time series by its mean monthly volume."""
+    """Clasifica una serie temporal según su volumen medio mensual."""
     if mean_monthly < FREQ_LOW_THRESHOLD:
         return 'baja'
     if mean_monthly < FREQ_MEDIUM_THRESHOLD:
@@ -220,7 +220,7 @@ def _classify_series(mean_monthly: float) -> str:
 def _run_all_models_and_pick_best(
     values: list, n_months: int, series_start_year: int, series_start_month: int
 ) -> tuple:
-    """Run all four models; return (best_result, best_key) or (None, None) on total failure."""
+    """Ejecuta los cuatro modelos; devuelve (best_result, best_key) o (None, None) en caso de falla total."""
     candidates = {}
     for key, fn, extra_args in [
         ('linear_trend', trend.fit_and_forecast, []),
@@ -243,8 +243,8 @@ def _forecast_for_crime_type(
     series_start_year: int, series_start_month: int
 ) -> tuple:
     """
-    Apply the model appropriate for the series frequency class.
-    Returns (result_dict, model_key) or (None, None) if no model could fit.
+    Aplica el modelo apropiado según la clase de frecuencia de la serie.
+    Devuelve (result_dict, model_key) o (None, None) si ningún modelo pudo ajustarse.
     """
     y = np.array(values, dtype=float)
 
@@ -253,7 +253,7 @@ def _forecast_for_crime_type(
             return trend.fit_and_forecast(values, n_months), 'linear_trend'
         except Exception:
             pass
-        # Fallback: flat forecast at historical mean
+        # Recurso alternativo: pronóstico plano con la media histórica
         avg = float(np.mean(y)) if len(y) > 0 else 0.0
         fitted = np.full(len(y), avg)
         errors = y - fitted
@@ -275,27 +275,27 @@ def _forecast_for_crime_type(
             return exponential_smoothing.fit_and_forecast(values, n_months), 'exponential_smoothing'
         except Exception:
             pass
-        # Fallback to linear trend
+        # Recurso alternativo: tendencia lineal
         try:
             return trend.fit_and_forecast(values, n_months), 'linear_trend'
         except Exception:
             pass
         return None, None
 
-    # 'alta' — run all four and pick best by MAE
+    # 'alta' — ejecutar los cuatro modelos y elegir el mejor por DMA
     return _run_all_models_and_pick_best(values, n_months, series_start_year, series_start_month)
 
 
 def run_all_crime_types_forecast(canton: str, n_months: int) -> dict:
     """
-    Bottom-Up aggregated forecast for all crime types in a canton (or the full province).
+    Pronóstico agregado Bottom-Up para todos los tipos de delito en un cantón (o toda la provincia).
 
-    Steps:
-      1. Enumerate all crime types with records in the canton.
-      2. Classify each series by monthly volume (low / medium / high).
-      3. Apply the appropriate model per class.
-      4. Sum individual forecasts → Bottom-Up total.
-      5. Return structured results for the template.
+    Pasos:
+      1. Enumerar todos los tipos de delito con registros en el cantón.
+      2. Clasificar cada serie por volumen mensual (baja / media / alta).
+      3. Aplicar el modelo apropiado según la clase.
+      4. Sumar los pronósticos individuales → total Bottom-Up.
+      5. Devolver resultados estructurados para la plantilla.
     """
     is_all_cantons = canton.upper() == ALL_CANTONS_TOKEN
     display_canton = 'Provincia de Alajuela' if is_all_cantons else canton.title()
@@ -319,7 +319,7 @@ def run_all_crime_types_forecast(canton: str, n_months: int) -> dict:
     last_year = aggregate_series[-1]['year']
     last_month = aggregate_series[-1]['month']
 
-    # Build forecast period labels
+    # Construye las etiquetas del período de pronóstico
     forecast_labels = []
     yr, mo = last_year, last_month
     for _ in range(n_months):
@@ -379,7 +379,7 @@ def run_all_crime_types_forecast(canton: str, n_months: int) -> dict:
             'series': aggregate_series,
         }
 
-    # Fill contribution percentages
+    # Calcular porcentajes de contribución
     total_avg = float(np.mean(bottom_up))
     for item in breakdown:
         item['contribution_pct'] = (
@@ -387,7 +387,7 @@ def run_all_crime_types_forecast(canton: str, n_months: int) -> dict:
         )
     breakdown.sort(key=lambda x: x['contribution_pct'], reverse=True)
 
-    # Build forecast table (same structure as generate_forecast)
+    # Construye la tabla de pronóstico (misma estructura que generate_forecast)
     forecast_table = []
     for i, label in enumerate(forecast_labels):
         yr_f, mo_f = int(label[:4]), int(label[5:7])
@@ -400,7 +400,7 @@ def run_all_crime_types_forecast(canton: str, n_months: int) -> dict:
             'value_raw': raw_val,
         })
 
-    # Interpretation
+    # Interpretación
     recent_avg = (
         float(np.mean(historical_values[-6:])) if len(historical_values) >= 6
         else float(np.mean(historical_values))
@@ -423,7 +423,7 @@ def run_all_crime_types_forecast(canton: str, n_months: int) -> dict:
     peak_count = round(float(bottom_up[peak_idx]))
     top_delito = breakdown[0]['crime_type'] if breakdown else ''
 
-    # Risk level relative to historical mean
+    # Nivel de riesgo relativo al promedio histórico
     hist_mean = float(np.mean(historical_values)) if historical_values else 0.0
     if hist_mean > 0:
         ratio = forecast_avg_val / hist_mean
@@ -488,14 +488,14 @@ def run_all_crime_types_forecast(canton: str, n_months: int) -> dict:
 
 def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
     """
-    Main forecasting entry point.
+    Punto de entrada principal del pronóstico.
 
-    Runs all four quantitative models on the filtered time series,
-    compares performance metrics, selects the best model by MAE (DMA),
-    and returns structured results ready for template rendering.
+    Ejecuta los cuatro modelos cuantitativos sobre la serie temporal filtrada,
+    compara métricas de desempeño, selecciona el mejor modelo por MAE (DMA)
+    y devuelve resultados estructurados listos para renderizar en la plantilla.
 
-    When delito == ALL_DELITOS_TOKEN, delegates to run_all_crime_types_forecast
-    which uses a Bottom-Up approach instead of naive aggregation.
+    Cuando delito == ALL_DELITOS_TOKEN, delega en run_all_crime_types_forecast
+    que utiliza un enfoque Bottom-Up en lugar de agregación ingenua.
     """
     # 0. Normalize display labels
     is_all_delitos = delito.upper() == ALL_DELITOS_TOKEN
@@ -503,11 +503,11 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
     display_delito = 'Todos los delitos' if is_all_delitos else delito
     display_canton = 'Provincia de Alajuela' if is_all_cantons else canton
 
-    # Branch: Bottom-Up pipeline for all crime types
+    # Rama: canalización Bottom-Up para todos los tipos de delito
     if is_all_delitos:
         return run_all_crime_types_forecast(canton, n_months)
 
-    # 1. Retrieve time series
+    # 1. Recupera la serie temporal
     series_data = get_time_series(canton, delito)
 
     if not series_data:
@@ -525,7 +525,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
     last_year = series_data[-1]['year']
     last_month = series_data[-1]['month']
 
-    # 2. Run all models
+    # 2. Ejecuta todos los modelos
     results = {}
     errors_map = {}
 
@@ -568,11 +568,11 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
             'series': series_data,
         }
 
-    # 3. Select best model by MAE (lowest)
+    # 3. Selecciona el mejor modelo por DMA (menor)
     best_key = min(results, key=lambda k: results[k]['mae'])
     best_result = results[best_key]
 
-    # Prepare model parameters for template display
+    # Prepara los parámetros del modelo para mostrar en la plantilla
     best_params = best_result.get('params', {})
     best_seasonal_list = []
     if best_key in ('seasonal_index', 'multiplicative_decomposition'):
@@ -585,14 +585,14 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
                 'value': v,
             })
 
-    # 4. Build forecast period labels
+    # 4. Construye las etiquetas del período de pronóstico
     forecast_labels = []
     yr, mo = last_year, last_month
     for i in range(n_months):
         yr, mo = _add_months(yr, mo, 1)
         forecast_labels.append(f"{yr}-{mo:02d}")
 
-    # 5. Build comparison metrics table (all methods)
+    # 5. Construye la tabla comparativa de métricas (todos los métodos)
     metrics_comparison = []
     for key, res in results.items():
         metrics_comparison.append({
@@ -606,7 +606,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
         })
     metrics_comparison.sort(key=lambda x: x['mae'])
 
-    # 6. Build forecast table for best model
+    # 6. Construye la tabla de pronóstico para el mejor modelo
     best_forecast_raw = [round(max(0.0, v), 2) for v in best_result['forecast']]
     best_forecast_values = [round(v) for v in best_result['forecast']]
     forecast_table = []
@@ -620,7 +620,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
             'value_raw': val_raw,
         })
 
-    # 7. Generate automatic interpretation
+    # 7. Genera interpretación automática
     interpretation = _generate_interpretation(
         canton=display_canton,
         delito=display_delito,
@@ -632,7 +632,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
         forecast_labels=forecast_labels,
     )
 
-    # 8. Build per-method forecast data for Chart.js
+    # 8. Construye los datos de pronóstico por método para Chart.js
     methods_chart_data = {}
     for key, res in results.items():
         methods_chart_data[key] = {
@@ -671,7 +671,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
         'best_description': best_result.get('description', ''),
         'best_seasonal_list': best_seasonal_list,
 
-        # All methods data
+        # Datos de todos los métodos
         'metrics_comparison': metrics_comparison,
         'methods_chart_data': methods_chart_data,
         'forecast_table': forecast_table,
@@ -693,7 +693,7 @@ def _generate_interpretation(
     forecast_labels: list | None = None,
 ) -> str:
     """
-    Generate an automatic Spanish-language interpretation of the forecast results.
+    Genera una interpretación automática en español de los resultados del pronóstico.
     """
     if not values or not forecast_values:
         return "No hay datos suficientes para generar una interpretación."
@@ -714,7 +714,7 @@ def _generate_interpretation(
     mae = best_result['mae']
     accuracy = best_result['accuracy']
 
-    # Peak projected month
+    # Mes proyectado de mayor incidencia
     peak_idx = int(np.argmax(forecast_values))
     peak_count = round(float(forecast_values[peak_idx]))
     if forecast_labels and peak_idx < len(forecast_labels):
@@ -725,7 +725,7 @@ def _generate_interpretation(
     else:
         peak_str = f"el mes {peak_idx + 1} ({peak_count} casos)"
 
-    # Risk level relative to full historical mean
+    # Nivel de riesgo relativo a la media histórica completa
     hist_mean = float(np.mean(values)) if values else 0.0
     if hist_mean > 0:
         ratio = float(forecast_avg) / hist_mean

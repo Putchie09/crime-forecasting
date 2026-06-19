@@ -1,14 +1,14 @@
 """
-Startup service: automatic dataset import on Django boot.
+Servicio de inicio: importación automática del conjunto de datos al arrancar Django.
 
-Called from ForecastingConfig.ready() every time the server starts.
-Decides whether to run the full import pipeline based on:
-  1. Whether the database has any crime records (empty → import)
-  2. Whether the Excel file's modification time is newer than the last import
+Llamado desde ForecastingConfig.ready() cada vez que se inicia el servidor.
+Decide si ejecutar la canalización completa de importación según:
+  1. Si la base de datos contiene registros de delitos (vacía → importar)
+  2. Si la hora de modificación del archivo Excel es más reciente que la última importación
 
-This means the user only needs to:
-  - Replace datasets/Estadisticas.xlsx with a new version
-  - Restart the server
+Esto significa que el usuario solo debe:
+  - Reemplazar datasets/Estadisticas.xlsx con una nueva versión
+  - Reiniciar el servidor
 """
 
 import logging
@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 def run_auto_import(dataset_path: Path) -> None:
     """
-    Run the full data pipeline if the dataset has changed or the DB is empty.
-    Logs the result to DataImportLog so subsequent startups can skip the import.
+    Ejecuta la canalización completa de datos si el conjunto ha cambiado o la BD está vacía.
+    Registra el resultado en DataImportLog para que los siguientes arranques puedan omitir la importación.
     """
     from forecasting.models import DataImportLog, CrimeRecord
 

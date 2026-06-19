@@ -1,14 +1,14 @@
 """
-Management command: load_dataset
+Comando de gestión: load_dataset
 
-Usage:
+Uso:
     python manage.py load_dataset
     python manage.py load_dataset --path /path/to/Estadisticas.xlsx
 
-Reads the OIJ Excel dataset, cleans it, builds the monthly time series,
-and imports everything into the SQLite database.
-Prints a step-by-step audit table showing how many records each cleaning
-rule discards and why.
+Lee el dataset de OIJ en Excel, lo limpia, construye la serie temporal
+mensual e importa todo en la base de datos SQLite.
+Imprime una tabla de auditoría paso a paso mostrando cuántos registros
+descarta cada regla de limpieza y por qué.
 """
 
 from pathlib import Path
@@ -66,7 +66,7 @@ class Command(BaseCommand):
             self.stdout.write("Importando a la base de datos...")
             result = import_to_database(df, series)
 
-            # Register the import so the auto-import check can skip next startup
+            # Registrar la importación para que la verificación automática de importaciones pueda omitir el siguiente inicio
             from forecasting.models import DataImportLog
             DataImportLog.objects.create(
                 file_path=str(dataset_path),
@@ -88,7 +88,7 @@ class Command(BaseCommand):
             raise CommandError(f"Error durante la importación: {e}")
 
     def _print_diagnostics(self, diag_entries: list):
-        """Print null counts for key columns and available column names."""
+        """Imprime los conteos de nulos para columnas clave y los nombres de columnas disponibles."""
         null_entries = [e for e in diag_entries if e.get('tipo') == 'nulos']
         col_entry = next((e for e in diag_entries if e.get('tipo') == 'columnas'), None)
 
@@ -124,7 +124,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.MIGRATE_HEADING("=" * 72))
 
     def _print_audit(self, audit: list):
-        """Print a formatted step-by-step data cleaning audit table."""
+        """Imprime una tabla de auditoría de limpieza de datos formateada paso a paso."""
         if not audit:
             return
 

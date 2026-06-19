@@ -1,5 +1,5 @@
 """
-URL configuration for crime_forecasting project.
+Configuración de URLs para el proyecto crime_forecasting.
 """
 
 from django.contrib import admin

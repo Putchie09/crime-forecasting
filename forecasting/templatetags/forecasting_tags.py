@@ -9,7 +9,7 @@ register = template.Library()
 
 @register.filter(name='get_item')
 def get_item(dictionary, key):
-    """Allow dict[key] access in templates: {{ mydict|get_item:key }}"""
+    """Permite acceder a dict[key] en plantillas: {{ mydict|get_item:key }}"""
     if isinstance(dictionary, dict):
         return dictionary.get(str(key), '')
     return ''
@@ -17,7 +17,7 @@ def get_item(dictionary, key):
 
 @register.filter(name='abs_value')
 def abs_value(value):
-    """Return absolute value of a number."""
+    """Devuelve el valor absoluto de un número."""
     try:
         return abs(float(value))
     except (TypeError, ValueError):
@@ -26,7 +26,7 @@ def abs_value(value):
 
 @register.filter(name='percentage')
 def percentage(value, decimals=1):
-    """Format a float as a percentage string."""
+    """Formatea un flotante como una cadena porcentual."""
     try:
         return f"{float(value):.{int(decimals)}f}%"
     except (TypeError, ValueError):
@@ -55,8 +55,8 @@ def titlecase_es(value):
 @register.simple_tag(takes_context=True)
 def query_string(context, **kwargs):
     """
-    Build a query string preserving current GET params and overriding with kwargs.
-    Usage: {% query_string page=2 %} → ?q=foo&canton=BAR&page=2
+    Construye una cadena de consulta preservando los parámetros GET actuales y sobrescribiendo con kwargs.
+    Uso: {% query_string page=2 %} → ?q=foo&canton=BAR&page=2
     """
     request = context.get('request')
     if request is None:
@@ -73,7 +73,7 @@ def query_string(context, **kwargs):
 
 @register.filter(name='month_name_es')
 def month_name_es(month_number):
-    """Convert month integer to Spanish month name."""
+    """Convierte un entero de mes en el nombre del mes en español."""
     names = {
         1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
         5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
@@ -87,7 +87,7 @@ def month_name_es(month_number):
 
 @register.inclusion_tag('partials/pagination.html', takes_context=True)
 def pagination(context, page_obj, page_range):
-    """Render the pagination control partial."""
+    """Renderiza el parcial de control de paginación."""
     return {
         'page_obj': page_obj,
         'page_range': page_range,

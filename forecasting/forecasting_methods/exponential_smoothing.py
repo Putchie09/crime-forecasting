@@ -1,13 +1,13 @@
 """
 Suavizamiento Exponencial Simple (Simple Exponential Smoothing).
 
-Assigns exponentially decreasing weights to past observations.
-Recent observations receive more weight than older ones.
+Asigna pesos decrecientes exponencialmente a las observaciones pasadas.
+Las observaciones recientes tienen más peso que las antiguas.
 
-Model: S(t) = α·Y(t) + (1-α)·S(t-1)
-  where α ∈ (0, 1) is the smoothing parameter.
+Modelo: S(t) = α·Y(t) + (1-α)·S(t-1)
+  donde α ∈ (0, 1) es el parámetro de suavizado.
 
-The optimal α is found by minimizing the Sum of Squared Errors.
+El α óptimo se encuentra minimizando la suma de errores cuadrados.
 """
 
 import numpy as np
@@ -16,32 +16,32 @@ from typing import List
 
 
 def _compute_smoothed(values: np.ndarray, alpha: float) -> np.ndarray:
-    """Compute exponentially smoothed series."""
+    """Calcula la serie suavizada exponencialmente."""
     n = len(values)
     smoothed = np.zeros(n)
-    smoothed[0] = values[0]  # Initialize with first observation
+    smoothed[0] = values[0]  # Inicializa con la primera observación
     for t in range(1, n):
         smoothed[t] = alpha * values[t] + (1 - alpha) * smoothed[t - 1]
     return smoothed
 
 
 def _sse(alpha: float, values: np.ndarray) -> float:
-    """Sum of Squared Errors for optimization."""
+    """Suma de errores cuadrados para la optimización."""
     smoothed = _compute_smoothed(values, alpha)
-    errors = values[1:] - smoothed[:-1]  # one-step-ahead errors
+    errors = values[1:] - smoothed[:-1]  # errores de un paso adelante
     return float(np.sum(errors ** 2))
 
 
 def fit_and_forecast(values: List[float], n_forecast: int) -> dict:
     """
-    Fit an exponential smoothing model with optimal alpha and generate forecasts.
+    Ajusta un modelo de suavizamiento exponencial con α óptimo y genera pronósticos.
 
     Args:
-        values: Historical time series values.
-        n_forecast: Number of future periods to forecast.
+        values: Valores históricos de la serie de tiempo.
+        n_forecast: Cantidad de períodos futuros a pronosticar.
 
     Returns:
-        dict with fitted values, forecasts, metrics, and parameters.
+        dict con valores ajustados, pronósticos, métricas y parámetros.
     """
     n = len(values)
     if n < 3:
@@ -49,7 +49,7 @@ def fit_and_forecast(values: List[float], n_forecast: int) -> dict:
 
     y = np.array(values, dtype=float)
 
-    # Find optimal alpha via bounded optimization
+    # Encuentra el α óptimo con optimización acotada
     result = minimize_scalar(
         _sse,
         args=(y,),
@@ -59,24 +59,24 @@ def fit_and_forecast(values: List[float], n_forecast: int) -> dict:
     )
     alpha = float(result.x)
 
-    # Compute smoothed series
+    # Calcula la serie suavizada
     smoothed = _compute_smoothed(y, alpha)
 
-    # In-sample fitted values (one-step-ahead forecasts)
+    # Valores ajustados dentro de la muestra (pronósticos de un paso adelante)
     fitted = np.zeros(n)
     fitted[0] = smoothed[0]
     fitted[1:] = smoothed[:-1]
 
-    # Future forecast: all periods receive the last smoothed value
+    # Pronóstico futuro: todos los períodos usan el último valor suavizado
     last_smooth = smoothed[-1]
     forecast = np.full(n_forecast, last_smooth)
 
-    # Clip negatives
+    # Elimina valores negativos
     fitted = np.maximum(fitted, 0)
     forecast = np.maximum(forecast, 0)
 
-    # One-step-ahead errors: y[t] vs smoothed[t-1], excluding t=0 where
-    # fitted[0] == y[0] by construction and would artificially deflate MAE.
+    # Errores de un paso adelante: y[t] vs smoothed[t-1], excluyendo t=0 porque
+    # fitted[0] == y[0] por construcción y eso reduciría artificialmente el MAE.
     osa_errors = y[1:] - smoothed[:-1]
     mae = float(np.mean(np.abs(osa_errors)))
     mse = float(np.mean(osa_errors ** 2))

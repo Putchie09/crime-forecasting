@@ -1,5 +1,5 @@
 """
-Utility functions used across the forecasting application.
+Funciones utilitarias usadas en la aplicación de pronóstico.
 """
 
 import logging
@@ -28,16 +28,16 @@ def generate_period_labels(
     fmt: str = 'YYYY-MM',
 ) -> List[str]:
     """
-    Generate a list of period label strings.
+    Genera una lista de etiquetas de período.
 
     Args:
-        start_year: Starting year.
-        start_month: Starting month (1-12).
-        n_periods: How many periods to generate.
-        fmt: Format string — 'YYYY-MM' or 'MMM YYYY'.
+        start_year: Año de inicio.
+        start_month: Mes de inicio (1-12).
+        n_periods: Cantidad de períodos a generar.
+        fmt: Formato — 'YYYY-MM' o 'MMM YYYY'.
 
     Returns:
-        List of formatted period strings.
+        Lista de cadenas de período formateadas.
     """
     labels = []
     yr, mo = start_year, start_month
@@ -57,15 +57,15 @@ def generate_period_labels(
 
 def add_months(year: int, month: int, delta: int) -> Tuple[int, int]:
     """
-    Add delta months to a (year, month) pair.
+    Suma meses a un par (año, mes).
 
     Args:
-        year: Base year.
-        month: Base month (1-12).
-        delta: Number of months to add (can be negative).
+        year: Año base.
+        month: Mes base (1-12).
+        delta: Cantidad de meses a sumar (puede ser negativa).
 
     Returns:
-        Tuple (new_year, new_month).
+        Tupla (nuevo_año, nuevo_mes).
     """
     total = (year - 1) * 12 + (month - 1) + delta
     return (total // 12 + 1, total % 12 + 1)
@@ -73,8 +73,8 @@ def add_months(year: int, month: int, delta: int) -> Tuple[int, int]:
 
 def percentage_change(old_val: float, new_val: float) -> Optional[float]:
     """
-    Compute percentage change from old_val to new_val.
-    Returns None if old_val is zero.
+    Calcula el cambio porcentual entre old_val y new_val.
+    Devuelve None si old_val es cero.
     """
     if old_val == 0:
         return None
@@ -82,7 +82,7 @@ def percentage_change(old_val: float, new_val: float) -> Optional[float]:
 
 
 def format_metric(value: float, decimals: int = 4) -> str:
-    """Format a metric value to a fixed number of decimal places."""
+    """Formatea un valor numérico a un número fijo de decimales."""
     try:
         return f"{float(value):.{decimals}f}"
     except (TypeError, ValueError):
@@ -90,12 +90,12 @@ def format_metric(value: float, decimals: int = 4) -> str:
 
 
 def clamp(value: float, min_val: float = 0.0, max_val: float = 100.0) -> float:
-    """Clamp a value between min and max."""
+    """Restringe un valor entre un mínimo y un máximo."""
     return max(min_val, min(max_val, value))
 
 
 def safe_divide(numerator: float, denominator: float, default: float = 0.0) -> float:
-    """Divide safely, returning default if denominator is zero."""
+    """Divide de forma segura, devolviendo el valor por defecto si el denominador es cero."""
     if denominator == 0:
         return default
     return numerator / denominator

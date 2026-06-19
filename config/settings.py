@@ -82,11 +82,11 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Dataset path – place your Estadisticas.xlsx here
+# Ruta del conjunto de datos — coloque aquí su Estadisticas.xlsx
 DATASET_PATH = BASE_DIR / 'datasets' / 'Estadisticas.xlsx'
 
 # Reports directory
 REPORTS_DIR = BASE_DIR / 'reports'
 
-# Pagination
+# Paginación
 DATA_PAGE_SIZE = 50

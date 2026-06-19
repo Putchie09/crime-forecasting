@@ -6,12 +6,12 @@
     <title>{% block title %}Criminalidad Alajuela{% endblock %}</title>
     <meta name="description" content="Sistema de pronóstico de criminalidad para la provincia de Alajuela, Costa Rica." />
 
-    <!-- Inter font -->
+    <!-- Fuente Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 
-    <!-- Tailwind CSS CDN -->
+    <!-- CDN de Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -42,36 +42,36 @@
         }
     </script>
 
-    <!-- Chart.js -->
+    <!-- Librería Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
     <style>
         *, *::before, *::after { box-sizing: border-box; }
         html { font-family: 'Inter', system-ui, sans-serif; }
 
-        /* Scrollbar styling */
+        /* Estilo del scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
-        /* Nav active underline */
+        /* Subrayado del enlace activo */
         .nav-link-active {
             border-bottom: 2px solid #1B263B;
             color: #1B263B !important;
             font-weight: 600;
         }
 
-        /* Smooth transitions */
+        /* Transiciones suaves */
         .transition-all { transition: all 0.2s ease; }
 
-        /* Table hover */
+        /* Hover de tabla */
         .data-table tr:hover td { background-color: #f8fafc; }
 
-        /* Chart container */
+        /* Contenedor de gráficos */
         .chart-container { position: relative; }
 
-        /* KPI card */
+        /* Tarjeta KPI */
         .kpi-card {
             background: white;
             border: 1px solid #e2e8f0;
@@ -79,7 +79,7 @@
             padding: 1.25rem 1.5rem;
         }
 
-        /* Method card */
+        /* Tarjeta de método */
         .method-card {
             background: white;
             border: 1px solid #e2e8f0;
@@ -93,7 +93,7 @@
             background: #fafbfd;
         }
 
-        /* Best badge */
+        /* Distintivo de mejor */
         .badge-best {
             background: #dbeafe;
             color: #1d4ed8;
@@ -103,7 +103,7 @@
             font-weight: 600;
         }
 
-        /* Loading spinner */
+        /* Indicador de carga */
         @keyframes spin { to { transform: rotate(360deg); } }
         .spinner {
             width: 1.25rem; height: 1.25rem;
@@ -114,14 +114,14 @@
             display: inline-block;
         }
 
-        /* Focus rings */
+        /* Anillos de enfoque */
         input:focus, select:focus {
             outline: none;
             border-color: #1B263B !important;
             box-shadow: 0 0 0 3px rgba(27,38,59,0.1);
         }
 
-        /* Table */
+        /* Tabla */
         .pro-table th {
             background: #1B263B;
             color: white;
@@ -142,7 +142,7 @@
         .pro-table tr:last-child td { border-bottom: none; }
         .pro-table tr:hover td { background: #f8fafc; }
 
-        /* Metrics table best row */
+        /* Fila mejor en tabla de métricas */
         .metrics-best { background: #eff6ff !important; }
         .metrics-best td { font-weight: 600; color: #1d4ed8; }
     </style>
@@ -152,19 +152,19 @@
 
 <body class="h-full bg-slate-50 text-slate-900 antialiased flex flex-col">
 
-    <!-- ─── Navigation ───────────────────────────────────────────── -->
+    <!-- ─── Navegación ───────────────────────────────────────────── -->
     <header class="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <nav class="flex items-center justify-between h-14">
 
-                <!-- Brand -->
+                <!-- Marca -->
                 <a href="{% url 'forecasting:home' %}"
                    class="flex items-center gap-2 text-primary font-bold text-lg tracking-tight no-underline hover:opacity-80 transition-opacity">
 
                     Criminalidad Alajuela
                 </a>
 
-                <!-- Nav links -->
+                <!-- Enlaces de navegación -->
                 <div class="hidden sm:flex items-center gap-1">
                     <a href="{% url 'forecasting:home' %}"
                        class="px-3 py-2 text-sm text-slate-600 hover:text-primary font-medium transition-colors {% if request.resolver_match.url_name == 'home' %}nav-link-active{% endif %}">
@@ -180,7 +180,7 @@
                     </a>
                 </div>
 
-                <!-- Mobile menu button -->
+                <!-- Botón de menú móvil -->
                 <button id="mobile-menu-btn" class="sm:hidden p-2 rounded-md text-slate-600 hover:text-primary hover:bg-slate-100">
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
@@ -188,7 +188,7 @@
                 </button>
             </nav>
 
-            <!-- Mobile nav -->
+            <!-- Navegación móvil -->
             <div id="mobile-nav" class="hidden sm:hidden pb-3 border-t border-slate-100">
                 <div class="flex flex-col gap-1 pt-2">
                     <a href="{% url 'forecasting:home' %}" class="px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">Inicio</a>
@@ -199,12 +199,12 @@
         </div>
     </header>
 
-    <!-- ─── Main Content ─────────────────────────────────────────── -->
+    <!-- ─── Contenido principal ─────────────────────────────────────────── -->
     <main class="{% block main_width %}max-w-7xl{% endblock %} mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
         {% block content %}{% endblock %}
     </main>
 
-    <!-- ─── Footer ───────────────────────────────────────────────── -->
+    <!-- ─── Pie de página ───────────────────────────────────────────────── -->
     <footer class="mt-16 border-t border-slate-200 bg-white">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <p class="text-center text-sm text-slate-500">
@@ -214,7 +214,7 @@
     </footer>
 
     <script>
-        // Mobile menu toggle
+        // Alternar menú móvil
         const btn = document.getElementById('mobile-menu-btn');
         const nav = document.getElementById('mobile-nav');
         if (btn && nav) {

@@ -1,7 +1,8 @@
 """
-Models for the Crime Forecasting application.
+Modelos para la aplicación de Pronóstico de Criminalidad.
 
-Stores both raw crime records and aggregated monthly time series.
+Almacena tanto los registros brutos de delitos como las series temporales
+mensuales agregadas.
 """
 
 from django.db import models
@@ -9,8 +10,8 @@ from django.db import models
 
 class CrimeRecord(models.Model):
     """
-    Raw crime record from OIJ dataset.
-    Each row represents one reported criminal event.
+    Registro bruto de delito del dataset del OIJ.
+    Cada fila representa un evento criminal reportado.
     """
     delito = models.CharField(max_length=200, db_index=True, verbose_name='Delito')
     sub_delito = models.CharField(max_length=200, blank=True, null=True, verbose_name='SubDelito')
@@ -38,8 +39,8 @@ class CrimeRecord(models.Model):
 
 class MonthlySeries(models.Model):
     """
-    Aggregated monthly crime counts by canton and crime type.
-    This is the time series used by the forecasting models.
+    Conteos mensuales agregados de delitos por cantón y tipo de delito.
+    Esta es la serie de tiempo usada por los modelos de pronóstico.
     """
     year = models.IntegerField(verbose_name='Año', db_index=True)
     month = models.IntegerField(verbose_name='Mes', db_index=True)
@@ -60,15 +61,15 @@ class MonthlySeries(models.Model):
 
     @property
     def period_label(self):
-        """Returns a formatted period string like '2024-01'."""
+        """Devuelve una cadena de período formateada como '2024-01'."""
         return f"{self.year}-{self.month:02d}"
 
 
 class DataImportLog(models.Model):
     """
-    Records each automatic or manual dataset import.
-    Used by the startup service to detect whether the Excel file
-    has changed since the last import, avoiding unnecessary re-processing.
+    Registra cada importación de dataset automática o manual.
+    Usado por el servicio de arranque para detectar si el archivo Excel
+    cambió desde la última importación, evitando reprocesos innecesarios.
     """
     imported_at = models.DateTimeField(auto_now_add=True, verbose_name='Importado en')
     file_path = models.CharField(max_length=500, verbose_name='Ruta del archivo')
