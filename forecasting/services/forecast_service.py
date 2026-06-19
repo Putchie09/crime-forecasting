@@ -1,9 +1,9 @@
 """
-Servicio de Pronóstico – orquesta todos los modelos cuantitativos.
+Servicio principal de pronósticos.
 
-Recupera la serie temporal mensual desde la base de datos,
-Ejecuta los cuatro métodos de pronóstico, compara su desempeño
-y devuelve un diccionario de resultados estructurado para las vistas.
+Obtiene los datos históricos, ejecuta los modelos de pronóstico,
+compara los resultados y devuelve la información que se mostrará
+al usuario.
 """
 
 import logging
@@ -36,11 +36,11 @@ MONTH_NAMES_FULL_ES = {
     9: 'Setiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
 }
 
-# ── Umbrales de clasificación según volumen de la serie ────────────────────
+# ── Umbrales para clasificar la frecuencia de los delitos ────────────────────
 # Promedio mensual de delitos que determina qué modelo se aplica por tipo de delito.
-FREQ_LOW_THRESHOLD = 1.0     # mean < 1   → baja frecuencia  (Tendencia Lineal o promedio)
-FREQ_MEDIUM_THRESHOLD = 5.0  # 1 ≤ mean < 5 → frecuencia media  (SES)
-                             # mean ≥ 5   → alta frecuencia (todos los 4 modelos, mejor por MAE)
+FREQ_LOW_THRESHOLD = 1.0     # # Menos de 1 caso por mes  (Tendencia Lineal o promedio)
+FREQ_MEDIUM_THRESHOLD = 5.0  # Entre 1 y 5 casos por mes 
+                             # Más de 5 casos por mes (todos los 4 modelos, mejor por MAE)
 
 
 def _add_months(year: int, month: int, delta: int):
