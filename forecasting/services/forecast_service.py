@@ -491,23 +491,24 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
     Punto de entrada principal del pronóstico.
 
     Ejecuta los cuatro modelos cuantitativos sobre la serie temporal filtrada,
-    compara métricas de desempeño, selecciona el mejor modelo por MAE (DMA)
-    y devuelve resultados estructurados listos para renderizar en la plantilla.
+    compara métricas de desempeño, selecciona el mejor modelo por MAE (DMA).
 
-    Cuando delito == ALL_DELITOS_TOKEN, delega en run_all_crime_types_forecast
-    que utiliza un enfoque Bottom-Up en lugar de agregación ingenua.
+    Cuando delito == ALL_DELITOS_TOKEN, pasa al método run_all_crime_types_forecast
+    que utiliza un enfoque Bottom-Up.
     """
-    # 0. Normalize display labels
+    
+    # 0. Normalizar nombres
     is_all_delitos = delito.upper() == ALL_DELITOS_TOKEN
     is_all_cantons = canton.upper() == ALL_CANTONS_TOKEN
     display_delito = 'Todos los delitos' if is_all_delitos else delito
     display_canton = 'Provincia de Alajuela' if is_all_cantons else canton
 
-    # Rama: canalización Bottom-Up para todos los tipos de delito
+    # Si se seleccionaron todos los delitos se debe usar otro método
     if is_all_delitos:
         return run_all_crime_types_forecast(canton, n_months)
 
-    # 1. Recupera la serie temporal
+
+    # 1. Cargar los datos históricos en serie temporal
     series_data = get_time_series(canton, delito)
 
     if not series_data:
@@ -516,6 +517,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
             'series': [],
         }
 
+    #separa los datos en números y meses
     values = [row['total_delitos'] for row in series_data]
     labels = [row['label'] for row in series_data]
     n = len(values)
@@ -525,25 +527,25 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
     last_year = series_data[-1]['year']
     last_month = series_data[-1]['month']
 
-    # 2. Ejecuta todos los modelos
+    # 2. Ejecutar todos los modelos y guarda los resultados en un diccionario
     results = {}
     errors_map = {}
 
-    # --- Tendencia Lineal ---
+    # Tendencia Lineal
     try:
         results['linear_trend'] = trend.fit_and_forecast(values, n_months)
     except Exception as e:
         errors_map['linear_trend'] = str(e)
         logger.warning(f"Tendencia lineal falló: {e}")
 
-    # --- Suavizamiento Exponencial ---
+    # Suavizamiento Exponencial
     try:
         results['exponential_smoothing'] = exponential_smoothing.fit_and_forecast(values, n_months)
     except Exception as e:
         errors_map['exponential_smoothing'] = str(e)
         logger.warning(f"Suavizamiento exponencial falló: {e}")
 
-    # --- Índices Estacionales ---
+    # Índices Estacionales
     try:
         results['seasonal_index'] = seasonal_index.fit_and_forecast(
             values, n_months, start_year, start_month
@@ -552,7 +554,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
         errors_map['seasonal_index'] = str(e)
         logger.warning(f"Índices estacionales falló: {e}")
 
-    # --- Descomposición Multiplicativa ---
+    # Descomposición Multiplicativa 
     try:
         results['multiplicative_decomposition'] = multiplicative_decomposition.fit_and_forecast(
             values, n_months, start_year, start_month
@@ -575,10 +577,11 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
     # Prepara los parámetros del modelo para mostrar en la plantilla
     best_params = best_result.get('params', {})
     best_seasonal_list = []
+    #Si el mejor método usa esstacionalidad prepara los datos por mes para mostrarlos
     if best_key in ('seasonal_index', 'multiplicative_decomposition'):
-        si = best_params.get('seasonal_indices', {})
+        si = best_params.get('seasonal_indices', {}) # obtener indices estacionales, ej: "1": 0.8
         for k, v in sorted(si.items(), key=lambda x: int(x[0])):
-            month_idx = int(k)
+            month_idx = int(k) # convertir mes a número
             best_seasonal_list.append({
                 'month_num': k,
                 'month_name': MONTH_NAMES_ES.get(month_idx, k),
@@ -586,6 +589,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
             })
 
     # 4. Construye las etiquetas del período de pronóstico
+    # Ej. 2026-01
     forecast_labels = []
     yr, mo = last_year, last_month
     for i in range(n_months):
@@ -607,8 +611,9 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
     metrics_comparison.sort(key=lambda x: x['mae'])
 
     # 6. Construye la tabla de pronóstico para el mejor modelo
-    best_forecast_raw = [round(max(0.0, v), 2) for v in best_result['forecast']]
-    best_forecast_values = [round(v) for v in best_result['forecast']]
+    best_forecast_raw = [round(max(0.0, v), 2) for v in best_result['forecast']] # valores redondeados a 2 decimales
+    best_forecast_values = [round(v) for v in best_result['forecast']] # vaalores redondeados a enteros
+    
     forecast_table = []
     for label, val, val_raw in zip(forecast_labels, best_forecast_values, best_forecast_raw):
         yr_f, mo_f = int(label[:4]), int(label[5:7])
@@ -651,7 +656,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
         'composition_data': [],
         'n_months': n_months,
 
-        # Historical series
+        # Series históricas
         'series': series_data,
         'historical_labels': labels,
         'historical_values': values,
@@ -659,7 +664,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
         # Forecast labels
         'forecast_labels': forecast_labels,
 
-        # Best model
+        # Mejor modelo
         'best_method': best_result['method_name'],
         'best_method_key': best_key,
         'best_forecast': best_forecast_values,
@@ -677,7 +682,7 @@ def generate_forecast(canton: str, delito: str, n_months: int) -> dict:
         'forecast_table': forecast_table,
         'model_errors': errors_map,
 
-        # Interpretation text
+        # Texto de interpretación
         'interpretation': interpretation,
     }
 
