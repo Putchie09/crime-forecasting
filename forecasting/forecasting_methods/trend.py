@@ -1,12 +1,10 @@
 """
 Tendencia Lineal.
 
-Ajusta una regresión lineal simple a la serie de tiempo y proyecta
-la línea de tendencia hacia los períodos futuros.
+Calcula una línea de tendencia a partir de los datos históricos
+y la utiliza para estimar períodos futuros.
 
 Modelo: Y(t) = a + b*t
-  donde t es el índice temporal (1, 2, 3, ...)
-  a = intercepto, b = pendiente
 """
 import numpy as np
 from typing import List, Tuple
@@ -14,49 +12,36 @@ from typing import List, Tuple
 
 def fit_and_forecast(values: List[float], n_forecast: int) -> dict:
     """
-    Ajusta un modelo de tendencia lineal y genera pronósticos.
-
-    Args:
-        values: Valores históricos de la serie de tiempo (totales mensuales).
-        n_forecast: Cantidad de períodos futuros a pronosticar.
-
-    Returns:
-        dict con claves:
-            fitted: valores ajustados dentro de la muestra
-            forecast: valores de pronóstico futuro
-            mae: Error Medio Absoluto (DMA)
-            mse: Error Cuadrático Medio
-            rmse: Raíz del Error Cuadrático Medio
-            accuracy: Porcentaje de precisión (1 - MAE/media)
-            params: diccionario con parámetros del modelo (a, b)
+    Calcula la tendencia lineal y genera pronósticos futuros.
     """
     n = len(values)
     if n < 2:
         raise ValueError("Se necesitan al menos 2 períodos de datos para tendencia lineal.")
 
     y = np.array(values, dtype=float)
-    t = np.arange(1, n + 1, dtype=float)
+    t = np.arange(1, n + 1, dtype=float) # Asigna un número consecutivo a cada período
 
-    # Regresión lineal OLS: b = Σ(t*y) - n*t̄*ȳ / (Σt² - n*t̄²)
+    # Promedios utilizados para calcular la recta de tendencia
     t_mean = t.mean()
     y_mean = y.mean()
 
+    # Calcula la pendiente de la línea de tendencia
     b = np.sum((t - t_mean) * (y - y_mean)) / np.sum((t - t_mean) ** 2)
-    a = y_mean - b * t_mean
+    a = y_mean - b * t_mean # Calcula el punto donde inicia la recta de tendencia
 
-    # Valores ajustados (en la muestra)
+    # Valores estimados para los datos históricos
     fitted = a + b * t
 
-    # Pronóstico futuro
+    # Pronósticos futuros
     t_future = np.arange(n + 1, n + n_forecast + 1, dtype=float)
-    forecast = a + b * t_future
+    forecast = a + b * t_future # Proyecta la tendencia hacia los períodos futuros
 
-    # Limita pronósticos negativos a cero (no pueden existir crímenes negativos)
+    # Evita valores negativos
     fitted = np.maximum(fitted, 0)
     forecast = np.maximum(forecast, 0)
 
-    # Métricas (excluyendo el primer valor para evitar sesgo de inicialización)
-    errors = np.abs(y - fitted)
+    # Cálculo de métricas
+    errors = np.abs(y - fitted) # Diferencia entre los valores reales y los estimados
     mae = float(np.mean(errors))
     mse = float(np.mean((y - fitted) ** 2))
     rmse = float(np.sqrt(mse))
